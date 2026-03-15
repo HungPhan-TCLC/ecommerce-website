@@ -25,6 +25,15 @@
                     <span class="font-medium text-dark-700">{{ order.phone }}</span>
                 </div>
                 <div class="flex justify-between">
+                    <span class="text-dark-500">Thanh toán:</span>
+                    <span class="font-medium
+                        {% if payment_method == 'VNPay' %}text-blue-600
+                        {% elif payment_method == 'MoMo' %}text-pink-600
+                        {% else %}text-dark-700{% endif %}">
+                        {% if payment_method %}{{ payment_method }}{% else %}Thanh toán khi nhận hàng{% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between">
                     <span class="text-dark-500">Trạng thái:</span>
                     <span class="font-medium text-emerald-600">Đã xác nhận</span>
                 </div>

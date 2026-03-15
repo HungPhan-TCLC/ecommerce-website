@@ -8,8 +8,15 @@ import secrets
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from dotenv import load_dotenv
 from models import db, User, Product, Category, CartItem, Order, OrderItem, UserInteraction
 from recommendation import recommendation_engine
+from payment import (
+    vnpay_create_payment_url, vnpay_verify_return, VNPAY_RESPONSE_CODES,
+    momo_create_payment, momo_verify_return,
+)
+
+load_dotenv()
 
 
 def create_app():
@@ -954,6 +961,271 @@ def create_app():
             avg_ratings=avg_ratings,
             stats=stats,
         )
+
+
+    # ========================================================
+    #  TRANG CHỌN PHƯƠNG THỨC THANH TOÁN
+    # ========================================================
+    @app.route("/checkout/payment", methods=["GET", "POST"])
+    @login_required
+    def checkout_payment():
+        """
+        Bước trung gian: sau khi nhập địa chỉ, chọn phương thức thanh toán.
+        Lưu thông tin giao hàng vào session, chưa tạo Order.
+        """
+        cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
+        if not cart_items:
+            flash("Giỏ hàng trống!", "warning")
+            return redirect(url_for("cart"))
+
+        total = sum(item.product.price * item.quantity for item in cart_items)
+
+        if request.method == "POST":
+            full_name = request.form.get("full_name", "").strip()
+            phone     = request.form.get("phone", "").strip()
+            address   = request.form.get("address", "").strip()
+            note      = request.form.get("note", "").strip()
+
+            if not full_name or not phone or not address:
+                flash("Vui lòng điền đầy đủ thông tin giao hàng.", "error")
+                return render_template("checkout_payment.html", cart_items=cart_items, total=total)
+
+            # Lưu tạm vào session, chờ chọn phương thức thanh toán
+            session["pending_order"] = {
+                "full_name": full_name,
+                "phone":     phone,
+                "address":   address,
+                "note":      note,
+            }
+            return render_template("checkout_payment.html",
+                                   cart_items=cart_items,
+                                   total=total,
+                                   show_methods=True,
+                                   shipping_info=session["pending_order"])
+
+        return render_template("checkout_payment.html", cart_items=cart_items, total=total)
+
+    # ========================================================
+    #  VNPAY - TẠO URL THANH TOÁN
+    # ========================================================
+    @app.route("/payment/vnpay/create", methods=["POST"])
+    @login_required
+    def vnpay_create():
+        pending = session.get("pending_order")
+        if not pending:
+            flash("Phiên đặt hàng đã hết hạn, vui lòng thử lại.", "warning")
+            return redirect(url_for("checkout_payment"))
+
+        cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
+        if not cart_items:
+            flash("Giỏ hàng trống!", "warning")
+            return redirect(url_for("cart"))
+
+        total = sum(item.product.price * item.quantity for item in cart_items)
+
+        # Tạo Order với status="pending_payment"
+        order = Order(
+            user_id=current_user.id,
+            total_amount=total,
+            status="pending_payment",
+            full_name=pending["full_name"],
+            phone=pending["phone"],
+            address=pending["address"],
+            note=pending.get("note", ""),
+        )
+        db.session.add(order)
+        db.session.flush()
+
+        for item in cart_items:
+            db.session.add(OrderItem(
+                order_id=order.id,
+                product_id=item.product_id,
+                quantity=item.quantity,
+                price=item.product.price,
+            ))
+
+        db.session.commit()
+
+        # Lưu order_id vào session để xử lý khi VNPay callback
+        session["vnpay_order_id"] = order.id
+
+        client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+        payment_url = vnpay_create_payment_url(
+            order_id=order.id,
+            amount=total,
+            order_info=f"Thanh toan don hang LUXE #{order.id}",
+            client_ip=client_ip,
+        )
+
+        return redirect(payment_url)
+
+    # ========================================================
+    #  VNPAY - XỬ LÝ KẾT QUẢ RETURN
+    # ========================================================
+    @app.route("/payment/vnpay/return")
+    def vnpay_return():
+        params = request.args.to_dict()
+        is_valid, response_code, order_id_str = vnpay_verify_return(params)
+
+        try:
+            order_id = int(order_id_str)
+        except (ValueError, TypeError):
+            flash("Thông tin đơn hàng không hợp lệ.", "error")
+            return redirect(url_for("index"))
+
+        order = Order.query.get(order_id)
+        if not order:
+            flash("Không tìm thấy đơn hàng.", "error")
+            return redirect(url_for("index"))
+
+        if is_valid and response_code == "00":
+            # Thanh toán thành công
+            order.status = "confirmed"
+            order.payment_method = "vnpay"
+
+            # Xóa giỏ hàng + interaction
+            CartItem.query.filter_by(user_id=order.user_id).delete()
+            for item in order.items:
+                db.session.add(UserInteraction(
+                    user_id=order.user_id,
+                    product_id=item.product_id,
+                    interaction_type="purchase",
+                    rating=5.0,
+                ))
+            db.session.commit()
+            recommendation_engine.invalidate_cache()
+            session.pop("pending_order", None)
+            session.pop("vnpay_order_id", None)
+
+            flash("Thanh toán VNPay thành công!", "success")
+            return render_template("order_success.html", order=order, payment_method="VNPay")
+
+        else:
+            # Thanh toán thất bại → hủy order, trả hàng về giỏ
+            reason = VNPAY_RESPONSE_CODES.get(response_code, "Giao dịch thất bại")
+            order.status = "cancelled"
+            db.session.commit()
+            flash(f"Thanh toán VNPay thất bại: {reason}. Đơn hàng đã bị hủy.", "error")
+            return redirect(url_for("cart"))
+
+    # ========================================================
+    #  MOMO - TẠO LINK THANH TOÁN
+    # ========================================================
+    @app.route("/payment/momo/create", methods=["POST"])
+    @login_required
+    def momo_create():
+        pending = session.get("pending_order")
+        if not pending:
+            flash("Phiên đặt hàng đã hết hạn, vui lòng thử lại.", "warning")
+            return redirect(url_for("checkout_payment"))
+
+        cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
+        if not cart_items:
+            flash("Giỏ hàng trống!", "warning")
+            return redirect(url_for("cart"))
+
+        total = sum(item.product.price * item.quantity for item in cart_items)
+
+        # Tạo Order với status="pending_payment"
+        order = Order(
+            user_id=current_user.id,
+            total_amount=total,
+            status="pending_payment",
+            full_name=pending["full_name"],
+            phone=pending["phone"],
+            address=pending["address"],
+            note=pending.get("note", ""),
+        )
+        db.session.add(order)
+        db.session.flush()
+
+        for item in cart_items:
+            db.session.add(OrderItem(
+                order_id=order.id,
+                product_id=item.product_id,
+                quantity=item.quantity,
+                price=item.product.price,
+            ))
+
+        db.session.commit()
+        session["momo_order_id"] = order.id
+
+        pay_url, message = momo_create_payment(
+            order_id=order.id,
+            amount=total,
+            order_info=f"Thanh toan don hang LUXE #{order.id}",
+        )
+
+        if pay_url:
+            return redirect(pay_url)
+        else:
+            order.status = "cancelled"
+            db.session.commit()
+            flash(f"Không thể kết nối MoMo: {message}", "error")
+            return redirect(url_for("cart"))
+
+    # ========================================================
+    #  MOMO - XỬ LÝ KẾT QUẢ RETURN
+    # ========================================================
+    @app.route("/payment/momo/return")
+    def momo_return():
+        params = request.args.to_dict()
+        is_valid, result_code, order_id_str = momo_verify_return(params)
+
+        try:
+            order_id = int(order_id_str)
+        except (ValueError, TypeError):
+            flash("Thông tin đơn hàng không hợp lệ.", "error")
+            return redirect(url_for("index"))
+
+        order = Order.query.get(order_id)
+        if not order:
+            flash("Không tìm thấy đơn hàng.", "error")
+            return redirect(url_for("index"))
+
+        if result_code == 0:
+            order.status = "confirmed"
+            order.payment_method = "momo"
+
+            CartItem.query.filter_by(user_id=order.user_id).delete()
+            for item in order.items:
+                db.session.add(UserInteraction(
+                    user_id=order.user_id,
+                    product_id=item.product_id,
+                    interaction_type="purchase",
+                    rating=5.0,
+                ))
+            db.session.commit()
+            recommendation_engine.invalidate_cache()
+            session.pop("pending_order", None)
+            session.pop("momo_order_id", None)
+
+            flash("Thanh toán MoMo thành công!", "success")
+            return render_template("order_success.html", order=order, payment_method="MoMo")
+
+        else:
+            order.status = "cancelled"
+            db.session.commit()
+            flash("Thanh toán MoMo thất bại hoặc bị hủy. Đơn hàng đã bị hủy.", "error")
+            return redirect(url_for("cart"))
+
+    # ========================================================
+    #  MOMO - IPN (server-to-server notify, tùy chọn)
+    # ========================================================
+    @app.route("/payment/momo/notify", methods=["POST"])
+    def momo_notify():
+        """MoMo gọi endpoint này server-to-server để xác nhận giao dịch."""
+        try:
+            data = request.get_json()
+            _, result_code, order_id_str = momo_verify_return(data)
+            order = Order.query.get(int(order_id_str))
+            if order and result_code == 0 and order.status == "pending_payment":
+                order.status = "confirmed"
+                order.payment_method = "momo"
+                db.session.commit()
+            return jsonify({"status": "ok"}), 200
+        except Exception:
+            return jsonify({"status": "error"}), 400
 
     return app
 

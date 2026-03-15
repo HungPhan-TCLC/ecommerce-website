@@ -89,6 +89,7 @@ class Order(db.Model):
     phone = db.Column(db.String(20), nullable=False)
     address = db.Column(db.Text, nullable=False)
     note = db.Column(db.Text, nullable=True)
+    payment_method = db.Column(db.String(20), nullable=True)  # vnpay, momo, cod
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
