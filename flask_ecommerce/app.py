@@ -17,7 +17,7 @@ def create_app():
 
     # Cấu hình
     basedir = os.path.abspath(os.path.dirname(__file__))
-    app.config["SECRET_KEY"] = secrets.token_hex(32)
+    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "luxe-fashion-secret-key-change-in-production")
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "ecommerce.db")
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -586,6 +586,374 @@ def create_app():
             ],
             "algorithm": "co_purchase_analysis",
         })
+
+    # ========================================================
+    #  ADMIN - DECORATOR & MIDDLEWARE
+    # ========================================================
+    from functools import wraps
+
+    def admin_required(f):
+        """Decorator: chỉ cho phép user có is_admin=True"""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not current_user.is_authenticated or not current_user.is_admin:
+                flash("Bạn không có quyền truy cập trang này.", "error")
+                return redirect(url_for("index"))
+            return f(*args, **kwargs)
+        return decorated
+
+    # ========================================================
+    #  ADMIN - DASHBOARD
+    # ========================================================
+    @app.route("/admin")
+    @login_required
+    @admin_required
+    def admin_dashboard():
+        from sqlalchemy import func
+        from datetime import datetime, timedelta
+
+        # Thống kê tổng quan
+        stats = {
+            "total_products": Product.query.count(),
+            "total_users": User.query.count(),
+            "total_orders": Order.query.count(),
+            "total_revenue": db.session.query(func.sum(Order.total_amount)).scalar() or 0,
+            "pending_orders": Order.query.filter_by(status="confirmed").count(),
+            "total_interactions": UserInteraction.query.count(),
+        }
+
+        # Doanh thu 7 ngày gần nhất
+        revenue_data = []
+        for i in range(6, -1, -1):
+            day = datetime.utcnow() - timedelta(days=i)
+            day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day.replace(hour=23, minute=59, second=59)
+            rev = db.session.query(func.sum(Order.total_amount)).filter(
+                Order.created_at >= day_start,
+                Order.created_at <= day_end,
+            ).scalar() or 0
+            revenue_data.append({
+                "date": day.strftime("%d/%m"),
+                "revenue": int(rev),
+            })
+
+        # Top 5 sản phẩm bán chạy
+        top_products = db.session.query(
+            Product,
+            func.sum(OrderItem.quantity).label("total_sold"),
+        ).join(OrderItem).group_by(Product.id).order_by(
+            func.sum(OrderItem.quantity).desc()
+        ).limit(5).all()
+
+        # Đơn hàng mới nhất
+        recent_orders = Order.query.order_by(Order.created_at.desc()).limit(8).all()
+
+        return render_template(
+            "admin/dashboard.html",
+            stats=stats,
+            revenue_data=revenue_data,
+            top_products=top_products,
+            recent_orders=recent_orders,
+        )
+
+    # ========================================================
+    #  ADMIN - QUẢN LÝ SẢN PHẨM
+    # ========================================================
+    @app.route("/admin/products")
+    @login_required
+    @admin_required
+    def admin_products():
+        page = request.args.get("page", 1, type=int)
+        search = request.args.get("search", "").strip()
+        category_filter = request.args.get("category", "")
+
+        query = Product.query
+        if search:
+            query = query.filter(Product.name.ilike(f"%{search}%"))
+        if category_filter:
+            query = query.filter(Product.category_id == category_filter)
+
+        products = query.order_by(Product.created_at.desc()).paginate(
+            page=page, per_page=15, error_out=False
+        )
+        categories = Category.query.all()
+        return render_template(
+            "admin/products.html",
+            products=products,
+            categories=categories,
+            search=search,
+            category_filter=category_filter,
+        )
+
+    @app.route("/admin/products/create", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def admin_product_create():
+        categories = Category.query.all()
+        if request.method == "POST":
+            try:
+                original_price_raw = request.form.get("original_price", "").strip()
+                product = Product(
+                    name=request.form.get("name", "").strip(),
+                    description=request.form.get("description", "").strip(),
+                    price=float(request.form.get("price", 0)),
+                    original_price=float(original_price_raw) if original_price_raw else None,
+                    image_url=request.form.get("image_url", "").strip(),
+                    category_id=int(request.form.get("category_id")),
+                    tags=request.form.get("tags", "").strip(),
+                    gender=request.form.get("gender", "unisex"),
+                    material=request.form.get("material", "").strip(),
+                    style=request.form.get("style", "casual"),
+                    is_featured=request.form.get("is_featured") == "on",
+                    stock=int(request.form.get("stock", 50)),
+                )
+                db.session.add(product)
+                db.session.commit()
+                recommendation_engine.invalidate_cache()
+                flash(f'Đã tạo sản phẩm "{product.name}" thành công!', "success")
+                return redirect(url_for("admin_products"))
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Lỗi khi tạo sản phẩm: {str(e)}", "error")
+
+        return render_template("admin/product_form.html", product=None, categories=categories)
+
+    @app.route("/admin/products/<int:product_id>/edit", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def admin_product_edit(product_id):
+        product = Product.query.get_or_404(product_id)
+        categories = Category.query.all()
+
+        if request.method == "POST":
+            try:
+                original_price_raw = request.form.get("original_price", "").strip()
+                product.name = request.form.get("name", "").strip()
+                product.description = request.form.get("description", "").strip()
+                product.price = float(request.form.get("price", 0))
+                product.original_price = float(original_price_raw) if original_price_raw else None
+                product.image_url = request.form.get("image_url", "").strip()
+                product.category_id = int(request.form.get("category_id"))
+                product.tags = request.form.get("tags", "").strip()
+                product.gender = request.form.get("gender", "unisex")
+                product.material = request.form.get("material", "").strip()
+                product.style = request.form.get("style", "casual")
+                product.is_featured = request.form.get("is_featured") == "on"
+                product.stock = int(request.form.get("stock", 50))
+                db.session.commit()
+                recommendation_engine.invalidate_cache()
+                flash(f'Đã cập nhật sản phẩm "{product.name}".', "success")
+                return redirect(url_for("admin_products"))
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Lỗi khi cập nhật: {str(e)}", "error")
+
+        return render_template("admin/product_form.html", product=product, categories=categories)
+
+    @app.route("/admin/products/<int:product_id>/delete", methods=["POST"])
+    @login_required
+    @admin_required
+    def admin_product_delete(product_id):
+        product = Product.query.get_or_404(product_id)
+        try:
+            # Xóa các bản ghi liên quan trước
+            CartItem.query.filter_by(product_id=product_id).delete()
+            UserInteraction.query.filter_by(product_id=product_id).delete()
+            name = product.name
+            db.session.delete(product)
+            db.session.commit()
+            recommendation_engine.invalidate_cache()
+            flash(f'Đã xóa sản phẩm "{name}".', "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Không thể xóa: {str(e)}", "error")
+        return redirect(url_for("admin_products"))
+
+    # ========================================================
+    #  ADMIN - QUẢN LÝ DANH MỤC
+    # ========================================================
+    @app.route("/admin/categories")
+    @login_required
+    @admin_required
+    def admin_categories():
+        categories = Category.query.all()
+        return render_template("admin/categories.html", categories=categories)
+
+    @app.route("/admin/categories/create", methods=["POST"])
+    @login_required
+    @admin_required
+    def admin_category_create():
+        name = request.form.get("name", "").strip()
+        slug = request.form.get("slug", "").strip()
+        description = request.form.get("description", "").strip()
+        if not name or not slug:
+            flash("Tên và slug không được để trống.", "error")
+            return redirect(url_for("admin_categories"))
+        if Category.query.filter_by(slug=slug).first():
+            flash("Slug đã tồn tại.", "error")
+            return redirect(url_for("admin_categories"))
+        cat = Category(name=name, slug=slug, description=description)
+        db.session.add(cat)
+        db.session.commit()
+        flash(f'Đã tạo danh mục "{name}".', "success")
+        return redirect(url_for("admin_categories"))
+
+    @app.route("/admin/categories/<int:cat_id>/delete", methods=["POST"])
+    @login_required
+    @admin_required
+    def admin_category_delete(cat_id):
+        cat = Category.query.get_or_404(cat_id)
+        if cat.products:
+            flash(f'Không thể xóa "{cat.name}" vì còn {len(cat.products)} sản phẩm.', "error")
+            return redirect(url_for("admin_categories"))
+        db.session.delete(cat)
+        db.session.commit()
+        flash(f'Đã xóa danh mục "{cat.name}".', "success")
+        return redirect(url_for("admin_categories"))
+
+    # ========================================================
+    #  ADMIN - QUẢN LÝ ĐƠN HÀNG
+    # ========================================================
+    @app.route("/admin/orders")
+    @login_required
+    @admin_required
+    def admin_orders():
+        page = request.args.get("page", 1, type=int)
+        status_filter = request.args.get("status", "")
+        search = request.args.get("search", "").strip()
+
+        query = Order.query
+        if status_filter:
+            query = query.filter_by(status=status_filter)
+        if search:
+            query = query.filter(
+                db.or_(
+                    Order.full_name.ilike(f"%{search}%"),
+                    Order.phone.ilike(f"%{search}%"),
+                )
+            )
+        orders = query.order_by(Order.created_at.desc()).paginate(
+            page=page, per_page=15, error_out=False
+        )
+        return render_template(
+            "admin/orders.html",
+            orders=orders,
+            status_filter=status_filter,
+            search=search,
+        )
+
+    @app.route("/admin/orders/<int:order_id>")
+    @login_required
+    @admin_required
+    def admin_order_detail(order_id):
+        order = Order.query.get_or_404(order_id)
+        return render_template("admin/order_detail.html", order=order)
+
+    @app.route("/admin/orders/<int:order_id>/update-status", methods=["POST"])
+    @login_required
+    @admin_required
+    def admin_order_update_status(order_id):
+        order = Order.query.get_or_404(order_id)
+        new_status = request.form.get("status")
+        valid_statuses = ["pending", "confirmed", "shipped", "delivered", "cancelled"]
+        if new_status not in valid_statuses:
+            flash("Trạng thái không hợp lệ.", "error")
+            return redirect(url_for("admin_order_detail", order_id=order_id))
+        order.status = new_status
+        db.session.commit()
+        flash(f"Đã cập nhật trạng thái đơn hàng #{order.id} → {new_status}.", "success")
+        return redirect(url_for("admin_order_detail", order_id=order_id))
+
+    # ========================================================
+    #  ADMIN - QUẢN LÝ NGƯỜI DÙNG
+    # ========================================================
+    @app.route("/admin/users")
+    @login_required
+    @admin_required
+    def admin_users():
+        from sqlalchemy import func
+        page = request.args.get("page", 1, type=int)
+        search = request.args.get("search", "").strip()
+
+        query = User.query
+        if search:
+            query = query.filter(
+                db.or_(
+                    User.username.ilike(f"%{search}%"),
+                    User.email.ilike(f"%{search}%"),
+                    User.full_name.ilike(f"%{search}%"),
+                )
+            )
+        users = query.order_by(User.created_at.desc()).paginate(
+            page=page, per_page=15, error_out=False
+        )
+        return render_template("admin/users.html", users=users, search=search)
+
+    @app.route("/admin/users/<int:user_id>/toggle-admin", methods=["POST"])
+    @login_required
+    @admin_required
+    def admin_user_toggle_admin(user_id):
+        user = User.query.get_or_404(user_id)
+        if user.id == current_user.id:
+            flash("Không thể thay đổi quyền của chính mình.", "error")
+            return redirect(url_for("admin_users"))
+        user.is_admin = not user.is_admin
+        db.session.commit()
+        status = "Admin" if user.is_admin else "User"
+        flash(f'Đã đổi quyền {user.username} → {status}.', "success")
+        return redirect(url_for("admin_users"))
+
+    # ========================================================
+    #  ADMIN - THỐNG KÊ AI / RECOMMENDATION
+    # ========================================================
+    @app.route("/admin/ai-stats")
+    @login_required
+    @admin_required
+    def admin_ai_stats():
+        from sqlalchemy import func
+
+        # Thống kê interaction theo loại
+        interaction_stats = db.session.query(
+            UserInteraction.interaction_type,
+            func.count(UserInteraction.id).label("count"),
+        ).group_by(UserInteraction.interaction_type).all()
+
+        # Top sản phẩm được tương tác nhiều nhất
+        top_interacted = db.session.query(
+            Product,
+            func.count(UserInteraction.id).label("interaction_count"),
+        ).join(UserInteraction).group_by(Product.id).order_by(
+            func.count(UserInteraction.id).desc()
+        ).limit(10).all()
+
+        # Rating trung bình theo sản phẩm
+        avg_ratings = db.session.query(
+            Product,
+            func.avg(UserInteraction.rating).label("avg_rating"),
+            func.count(UserInteraction.rating).label("rating_count"),
+        ).join(UserInteraction).filter(
+            UserInteraction.rating.isnot(None)
+        ).group_by(Product.id).order_by(
+            func.avg(UserInteraction.rating).desc()
+        ).limit(10).all()
+
+        # Số user có tương tác (có thể dùng CF)
+        active_users = db.session.query(UserInteraction.user_id).distinct().count()
+
+        stats = {
+            "total_interactions": UserInteraction.query.count(),
+            "active_users": active_users,
+            "rated_interactions": UserInteraction.query.filter(UserInteraction.rating.isnot(None)).count(),
+            "purchase_interactions": UserInteraction.query.filter_by(interaction_type="purchase").count(),
+        }
+
+        return render_template(
+            "admin/ai_stats.html",
+            interaction_stats=interaction_stats,
+            top_interacted=top_interacted,
+            avg_ratings=avg_ratings,
+            stats=stats,
+        )
 
     return app
 

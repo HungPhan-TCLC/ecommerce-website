@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Admin{% endblock %} | LUXE Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { 50:'#fdf2f8',100:'#fce7f3',200:'#fbcfe8',300:'#f9a8d4',400:'#f472b6',500:'#ec4899',600:'#db2777',700:'#be185d',800:'#9d174d',900:'#831843' },
+                        dark: { 50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a' },
+                    },
+                    fontFamily: { body: ['Inter','sans-serif'] },
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="font-body bg-dark-50 text-dark-800 min-h-screen">
+
+<div class="flex min-h-screen">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="w-64 bg-dark-900 text-white flex flex-col fixed h-full z-30 transition-transform duration-300" id="admin-sidebar">
+        <!-- Logo -->
+        <div class="px-6 py-5 border-b border-dark-700">
+            <a href="{{ url_for('admin_dashboard') }}" class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-white"></i>
+                </div>
+                <div>
+                    <p class="font-semibold text-white leading-tight">LUXE Admin</p>
+                    <p class="text-xs text-dark-400">{{ current_user.full_name or current_user.username }}</p>
+                </div>
+            </a>
+        </div>
+
+        <!-- Nav -->
+        <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+            {% set nav_items = [
+                ('admin_dashboard',    'layout-dashboard', 'Dashboard',       'Tổng quan hệ thống'),
+                ('admin_products',     'package',          'Sản phẩm',        'Quản lý & thêm mới'),
+                ('admin_categories',   'tag',              'Danh mục',        'Phân loại sản phẩm'),
+                ('admin_orders',       'shopping-cart',    'Đơn hàng',        'Xử lý & theo dõi'),
+                ('admin_users',        'users',            'Người dùng',      'Tài khoản & quyền'),
+                ('admin_ai_stats',     'brain',            'AI & Gợi ý',      'Phân tích recommendation'),
+            ] %}
+            {% for endpoint, icon, label, sublabel in nav_items %}
+            <a href="{{ url_for(endpoint) }}"
+               class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group
+                      {% if request.endpoint == endpoint %}bg-primary-600 text-white{% else %}text-dark-300 hover:bg-dark-800 hover:text-white{% endif %}">
+                <i data-lucide="{{ icon }}" class="w-4 h-4 flex-shrink-0"></i>
+                <div>
+                    <p class="text-sm font-medium leading-tight">{{ label }}</p>
+                    <p class="text-xs opacity-60 leading-tight">{{ sublabel }}</p>
+                </div>
+            </a>
+            {% endfor %}
+        </nav>
+
+        <!-- Bottom links -->
+        <div class="px-3 py-4 border-t border-dark-700 space-y-1">
+            <a href="{{ url_for('index') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-dark-400 hover:bg-dark-800 hover:text-white transition-all text-sm">
+                <i data-lucide="store" class="w-4 h-4"></i>
+                Xem cửa hàng
+            </a>
+            <a href="{{ url_for('logout') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-dark-400 hover:bg-red-900/50 hover:text-red-300 transition-all text-sm">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                Đăng xuất
+            </a>
+        </div>
+    </aside>
+
+    <!-- ===== MAIN ===== -->
+    <div class="flex-1 ml-64 flex flex-col min-h-screen">
+
+        <!-- Top bar -->
+        <header class="bg-white border-b border-dark-200 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
+            <div class="flex items-center gap-3">
+                <button class="lg:hidden p-1.5 rounded text-dark-500 hover:bg-dark-100" id="sidebar-toggle">
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
+                <div>
+                    <h1 class="font-semibold text-dark-800 text-sm leading-tight">{% block page_title %}Admin Panel{% endblock %}</h1>
+                    <p class="text-xs text-dark-400 leading-tight">{% block page_subtitle %}{% endblock %}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                {% with messages = get_flashed_messages(with_categories=true) %}{% endwith %}
+                <div class="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-semibold text-xs">
+                    {{ (current_user.full_name or current_user.username)[:2].upper() }}
+                </div>
+            </div>
+        </header>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="px-6 pt-4 space-y-2">
+            {% for category, message in messages %}
+            <div class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
+                {% if category == 'success' %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                {% elif category == 'error' %}bg-red-50 text-red-700 border border-red-200
+                {% elif category == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
+                {% else %}bg-blue-50 text-blue-700 border border-blue-200{% endif %}">
+                {% if category == 'success' %}<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>
+                {% elif category == 'error' %}<i data-lucide="alert-circle" class="w-4 h-4 flex-shrink-0"></i>
+                {% else %}<i data-lucide="info" class="w-4 h-4 flex-shrink-0"></i>{% endif %}
+                {{ message }}
+                <button onclick="this.parentElement.remove()" class="ml-auto opacity-60 hover:opacity-100">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Content -->
+        <main class="flex-1 p-6">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="px-6 py-3 border-t border-dark-200 text-xs text-dark-400 text-center">
+            LUXE Fashion Admin Panel &mdash; Flask + AI Recommendation System
+        </footer>
+    </div>
+</div>
+
+<script>
+    lucide.createIcons();
+    document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
+        document.getElementById('admin-sidebar').classList.toggle('-translate-x-full');
+    });
+</script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

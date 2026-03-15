@@ -1,0 +1,199 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}AI & Recommendation Stats{% endblock %}
+{% block page_title %}AI & Gợi ý sản phẩm{% endblock %}
+{% block page_subtitle %}Phân tích dữ liệu Recommendation System{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stat cards -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    {% set cards = [
+        ('Tổng tương tác', stats.total_interactions, 'activity', 'purple'),
+        ('User hoạt động', stats.active_users, 'users', 'blue'),
+        ('Đã đánh giá', stats.rated_interactions, 'star', 'amber'),
+        ('Lượt mua hàng', stats.purchase_interactions, 'shopping-bag', 'green'),
+    ] %}
+    {% for label, value, icon, color in cards %}
+    <div class="bg-white rounded-xl border border-dark-200 p-4">
+        <div class="flex items-center justify-between mb-2">
+            <p class="text-xs font-medium text-dark-500 uppercase tracking-wide">{{ label }}</p>
+            <div class="w-7 h-7 rounded-lg flex items-center justify-center
+                {% if color=='purple' %}bg-purple-100 text-purple-600
+                {% elif color=='blue' %}bg-blue-100 text-blue-600
+                {% elif color=='amber' %}bg-amber-100 text-amber-600
+                {% else %}bg-emerald-100 text-emerald-600{% endif %}">
+                <i data-lucide="{{ icon }}" class="w-3.5 h-3.5"></i>
+            </div>
+        </div>
+        <p class="text-2xl font-bold text-dark-900">{{ value }}</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Charts row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+
+    <!-- Interaction breakdown -->
+    <div class="bg-white rounded-xl border border-dark-200 p-5">
+        <h3 class="font-semibold text-dark-800 text-sm mb-4">Phân bố loại tương tác</h3>
+        <div style="height:220px;position:relative">
+            <canvas id="interactionChart"></canvas>
+        </div>
+        <div class="mt-4 grid grid-cols-3 gap-2">
+            {% for itype, count in interaction_stats %}
+            <div class="text-center p-2 rounded-lg bg-dark-50">
+                <p class="text-lg font-bold text-dark-800">{{ count }}</p>
+                <p class="text-xs text-dark-500 capitalize">{{ itype }}</p>
+                <p class="text-xs text-dark-400">
+                    {% if itype == 'view' %}điểm 1.0
+                    {% elif itype == 'cart' %}điểm 3.0
+                    {% elif itype == 'purchase' %}điểm 5.0
+                    {% else %}—{% endif %}
+                </p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Avg rating chart -->
+    <div class="bg-white rounded-xl border border-dark-200 p-5">
+        <h3 class="font-semibold text-dark-800 text-sm mb-4">Top sản phẩm được đánh giá cao nhất</h3>
+        <div style="height:220px;position:relative">
+            <canvas id="ratingChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Top interacted products -->
+<div class="bg-white rounded-xl border border-dark-200 overflow-hidden mb-5">
+    <div class="px-5 py-4 border-b border-dark-100 flex items-center justify-between">
+        <div>
+            <h3 class="font-semibold text-dark-800 text-sm">Top 10 sản phẩm tương tác nhiều nhất</h3>
+            <p class="text-xs text-dark-400 mt-0.5">Dữ liệu này dùng làm input cho Collaborative Filtering</p>
+        </div>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-dark-50 border-b border-dark-100">
+                <tr>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Sản phẩm</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Danh mục</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Tổng tương tác</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Tỷ lệ phủ CF</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-dark-100">
+                {% set max_count = top_interacted[0][1] if top_interacted else 1 %}
+                {% for product, count in top_interacted %}
+                <tr class="hover:bg-dark-50">
+                    <td class="px-5 py-3">
+                        <div class="flex items-center gap-3">
+                            <img src="{{ product.image_url }}" alt="{{ product.name }}" class="w-9 h-10 object-cover rounded-lg bg-dark-100">
+                            <div>
+                                <p class="font-medium text-dark-800 text-xs">{{ product.name[:50] }}</p>
+                                <p class="text-xs text-dark-400">{{ product.style }} · {{ product.gender }}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-5 py-3">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-dark-100 text-dark-600">{{ product.category.name }}</span>
+                    </td>
+                    <td class="px-5 py-3">
+                        <div class="flex items-center gap-3">
+                            <div class="flex-1 max-w-24 h-1.5 bg-dark-100 rounded-full overflow-hidden">
+                                <div class="h-full bg-purple-500 rounded-full" style="width: {{ (count / max_count * 100) | int }}%"></div>
+                            </div>
+                            <span class="text-sm font-bold text-dark-700">{{ count }}</span>
+                        </div>
+                    </td>
+                    <td class="px-5 py-3 text-sm text-dark-600">{{ ((count / stats.total_interactions) * 100) | round(1) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Algorithm explanation -->
+<div class="bg-purple-50 border border-purple-200 rounded-xl p-5">
+    <div class="flex items-start gap-3">
+        <div class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="brain" class="w-4 h-4 text-purple-600"></i>
+        </div>
+        <div>
+            <h3 class="font-semibold text-purple-800 text-sm mb-2">Cách hệ thống AI hoạt động</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-purple-700">
+                <div class="bg-white rounded-lg p-3 border border-purple-100">
+                    <p class="font-semibold mb-1">Content-Based (TF-IDF)</p>
+                    <p class="text-purple-600 leading-relaxed">Vectorize tags+mô tả+style bằng TF-IDF. Dùng Cosine Similarity để tìm sản phẩm tương tự. Hoạt động ngay cả khi không có lịch sử mua hàng.</p>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-purple-100">
+                    <p class="font-semibold mb-1">Collaborative Filtering</p>
+                    <p class="text-purple-600 leading-relaxed">Xây dựng User-Item matrix với điểm view=1, cart=3, purchase=5. Tính User Similarity bằng Cosine. Gợi ý sản phẩm từ user tương tự.</p>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-purple-100">
+                    <p class="font-semibold mb-1">Co-Purchase Analysis</p>
+                    <p class="text-purple-600 leading-relaxed">Tìm user đã mua sản phẩm A → phân tích họ còn mua gì → rank theo tần suất. Tạo gợi ý "Người mua cũng mua".</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const interactionLabels = {{ interaction_stats | map(attribute=0) | list | tojson }};
+const interactionCounts = {{ interaction_stats | map(attribute=1) | list | tojson }};
+
+new Chart(document.getElementById('interactionChart'), {
+    type: 'doughnut',
+    data: {
+        labels: interactionLabels,
+        datasets: [{
+            data: interactionCounts,
+            backgroundColor: ['rgba(148,163,184,0.7)','rgba(251,191,36,0.7)','rgba(34,197,94,0.7)'],
+            borderColor:     ['#94a3b8','#f59e0b','#22c55e'],
+            borderWidth: 2,
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } }
+        }
+    }
+});
+
+const ratingLabels = {{ avg_ratings | map(attribute=0) | map(attribute='name') | list | map('truncate', 25, true, '...') | list | tojson }};
+const ratingValues = {{ avg_ratings | map(attribute=1) | list | tojson }};
+
+new Chart(document.getElementById('ratingChart'), {
+    type: 'bar',
+    data: {
+        labels: ratingLabels,
+        datasets: [{
+            label: 'Rating TB',
+            data: ratingValues.map(v => Math.round(v * 10) / 10),
+            backgroundColor: 'rgba(251,191,36,0.2)',
+            borderColor: 'rgba(245,158,11,0.9)',
+            borderWidth: 2, borderRadius: 4,
+        }]
+    },
+    options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { min: 0, max: 5, ticks: { font: { size: 10 } } },
+            y: { ticks: { font: { size: 10 } } }
+        }
+    }
+});
+</script>
+{% endblock %}

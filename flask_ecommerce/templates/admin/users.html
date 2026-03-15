@@ -1,0 +1,101 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Quản lý người dùng{% endblock %}
+{% block page_title %}Người dùng{% endblock %}
+{% block page_subtitle %}{{ users.total }} tài khoản trong hệ thống{% endblock %}
+
+{% block content %}
+
+<div class="flex flex-col sm:flex-row gap-3 mb-5">
+    <form method="GET" class="flex gap-2 flex-1">
+        <div class="relative flex-1 max-w-xs">
+            <input type="text" name="search" value="{{ search }}" placeholder="Tìm username, email, tên..."
+                   class="w-full pl-9 pr-3 py-2 text-sm border border-dark-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-300">
+            <i data-lucide="search" class="absolute left-2.5 top-2.5 w-4 h-4 text-dark-400"></i>
+        </div>
+        <button type="submit" class="px-4 py-2 text-sm bg-dark-800 text-white rounded-lg hover:bg-dark-700">Tìm</button>
+        {% if search %}
+        <a href="{{ url_for('admin_users') }}" class="px-3 py-2 text-sm text-dark-500 border border-dark-200 rounded-lg hover:bg-dark-50">Xóa</a>
+        {% endif %}
+    </form>
+</div>
+
+<div class="bg-white rounded-xl border border-dark-200 overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-dark-50 border-b border-dark-100">
+                <tr>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">ID</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Người dùng</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Email</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Đơn hàng</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Ngày tạo</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Quyền</th>
+                    <th class="px-5 py-3"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-dark-100">
+                {% for user in users.items %}
+                <tr class="hover:bg-dark-50 transition-colors {% if user.id == current_user.id %}bg-primary-50/50{% endif %}">
+                    <td class="px-5 py-3 text-xs text-dark-400 font-mono">{{ user.id }}</td>
+                    <td class="px-5 py-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0
+                                {% if user.is_admin %}bg-primary-100 text-primary-700{% else %}bg-dark-100 text-dark-600{% endif %}">
+                                {{ (user.full_name or user.username)[:2].upper() }}
+                            </div>
+                            <div>
+                                <p class="font-medium text-dark-800">{{ user.username }}</p>
+                                {% if user.full_name %}<p class="text-xs text-dark-400">{{ user.full_name }}</p>{% endif %}
+                                {% if user.id == current_user.id %}<p class="text-xs text-primary-500">(bạn)</p>{% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-5 py-3 text-sm text-dark-600">{{ user.email }}</td>
+                    <td class="px-5 py-3 text-sm font-medium text-dark-700">{{ user.orders | length }}</td>
+                    <td class="px-5 py-3 text-xs text-dark-500">{{ user.created_at.strftime('%d/%m/%Y') }}</td>
+                    <td class="px-5 py-3">
+                        {% if user.is_admin %}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-primary-100 text-primary-700 font-medium">
+                            <i data-lucide="shield-check" class="w-3 h-3"></i> Admin
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-dark-100 text-dark-600">
+                            User
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-5 py-3">
+                        {% if user.id != current_user.id %}
+                        <form method="POST" action="{{ url_for('admin_user_toggle_admin', user_id=user.id) }}"
+                              onsubmit="return confirm('{% if user.is_admin %}Thu hồi quyền admin của {{ user.username }}?{% else %}Cấp quyền admin cho {{ user.username }}?{% endif %}')">
+                            <button type="submit"
+                                    class="text-xs px-2.5 py-1 rounded-lg border transition-colors
+                                           {% if user.is_admin %}border-red-200 text-red-600 hover:bg-red-50{% else %}border-blue-200 text-blue-600 hover:bg-blue-50{% endif %}">
+                                {% if user.is_admin %}Thu hồi Admin{% else %}Cấp Admin{% endif %}
+                            </button>
+                        </form>
+                        {% else %}
+                        <span class="text-xs text-dark-300">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="px-5 py-12 text-center text-sm text-dark-400">Không tìm thấy người dùng</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if users.pages > 1 %}
+    <div class="px-5 py-4 border-t border-dark-100 flex gap-2 justify-end">
+        {% if users.has_prev %}
+        <a href="{{ url_for('admin_users', page=users.prev_num, search=search) }}" class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50">Trước</a>
+        {% endif %}
+        {% if users.has_next %}
+        <a href="{{ url_for('admin_users', page=users.next_num, search=search) }}" class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50">Sau</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

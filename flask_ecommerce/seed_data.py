@@ -469,8 +469,9 @@ def seed_products(categories):
 
 
 def seed_users():
-    """Tạo 5 user mẫu để test"""
+    """Tạo 5 user mẫu để test + 1 admin account"""
     users_data = [
+        {"username": "admin", "email": "admin@luxe.vn", "password": "admin123", "full_name": "Admin LUXE", "is_admin": True},
         {"username": "minh_anh", "email": "minhanh@example.com", "password": "password123", "full_name": "Nguyễn Minh Anh"},
         {"username": "duc_huy", "email": "duchuy@example.com", "password": "password123", "full_name": "Trần Đức Huy"},
         {"username": "thu_trang", "email": "thutrang@example.com", "password": "password123", "full_name": "Lê Thu Trang"},
@@ -485,12 +486,15 @@ def seed_users():
             email=u_data["email"],
             password_hash=generate_password_hash(u_data["password"]),
             full_name=u_data["full_name"],
+            is_admin=u_data.get("is_admin", False),
         )
         db.session.add(user)
         created_users.append(user)
 
     db.session.commit()
-    print(f"[OK] Đã tạo {len(users_data)} users. (Password mặc định: password123)")
+    print(f"[OK] Đã tạo {len(users_data)} users.")
+    print(f"     Admin account: username=admin / password=admin123")
+    print(f"     User accounts: password mặc định = password123")
     return User.query.all()
 
 
@@ -604,7 +608,10 @@ def seed_orders(users, products):
 
     phones = ["0901234567", "0912345678", "0923456789", "0934567890", "0945678901"]
 
-    for i, user in enumerate(users):
+    # Lọc bỏ admin, chỉ tạo đơn hàng cho user thường
+    normal_users = [u for u in users if not u.is_admin]
+
+    for i, user in enumerate(normal_users):
         # Mỗi user có 1-2 đơn hàng
         num_orders = random.randint(1, 2)
         user_products = random.sample(products, min(num_orders * 3, len(products)))
@@ -621,8 +628,8 @@ def seed_orders(users, products):
                 total_amount=total,
                 status=random.choice(["confirmed", "shipped", "delivered"]),
                 full_name=user.full_name,
-                phone=phones[i],
-                address=addresses[i],
+                phone=phones[i % len(phones)],
+                address=addresses[i % len(addresses)],
                 note="Giao giờ hành chính" if random.random() > 0.5 else "",
                 created_at=datetime.utcnow() - timedelta(days=random.randint(1, 60)),
             )
