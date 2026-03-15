@@ -1,0 +1,49 @@
+<!-- _product_card.html - Component card sản phẩm dùng chung -->
+<div class="product-card group">
+    <a href="{{ url_for('product_detail', product_id=product.id) }}" class="block">
+        <!-- Image -->
+        <div class="relative aspect-[3/4] rounded-xl overflow-hidden bg-dark-100 mb-3">
+            <img src="{{ product.image_url }}" alt="{{ product.name }}"
+                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                 loading="lazy">
+            
+            {% if product.original_price and product.original_price > product.price %}
+            <span class="absolute top-2.5 left-2.5 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                -{{ (product.price, product.original_price) | discount_percent }}%
+            </span>
+            {% endif %}
+
+            {% if product.is_featured %}
+            <span class="absolute top-2.5 right-2.5 bg-dark-900 text-white text-xs font-medium px-2.5 py-1 rounded-full">
+                HOT
+            </span>
+            {% endif %}
+
+            <!-- Quick Add overlay -->
+            {% if current_user.is_authenticated %}
+            <div class="absolute inset-x-0 bottom-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+                <form action="{{ url_for('add_to_cart', product_id=product.id) }}" method="POST" class="add-to-cart-form">
+                    <button type="submit" class="w-full py-2.5 bg-dark-900/90 backdrop-blur-sm text-white text-sm font-medium rounded-lg hover:bg-primary-600 transition-colors flex items-center justify-center gap-2">
+                        <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+                        Thêm vào giỏ
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Info -->
+        <div class="px-0.5">
+            <p class="text-xs text-dark-400 mb-1">{{ product.category.name }}</p>
+            <h3 class="text-sm font-medium text-dark-800 group-hover:text-primary-600 transition-colors line-clamp-2 leading-snug mb-2">
+                {{ product.name }}
+            </h3>
+            <div class="flex items-center gap-2">
+                <span class="text-base font-bold text-dark-900">{{ product.price | format_price }}</span>
+                {% if product.original_price and product.original_price > product.price %}
+                <span class="text-sm text-dark-400 line-through">{{ product.original_price | format_price }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </a>
+</div>

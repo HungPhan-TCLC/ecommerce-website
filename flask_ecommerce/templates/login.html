@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập{% endblock %}
+
+{% block content %}
+<div class="min-h-[70vh] flex items-center justify-center py-12 px-4">
+    <div class="w-full max-w-md">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <a href="{{ url_for('index') }}" class="font-display text-3xl font-bold text-dark-900">LUXE</a>
+            <h2 class="mt-4 text-xl font-semibold text-dark-800">Đăng nhập tài khoản</h2>
+            <p class="text-sm text-dark-400 mt-1">Chào mừng bạn trở lại!</p>
+        </div>
+
+        <!-- Form -->
+        <div class="bg-white border border-dark-100 rounded-2xl p-6 sm:p-8 shadow-sm">
+            <form method="POST" action="{{ url_for('login') }}" class="space-y-5">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-dark-600 mb-1.5">Tên đăng nhập</label>
+                    <div class="relative">
+                        <i data-lucide="user" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400"></i>
+                        <input type="text" name="username" id="username" required autocomplete="username"
+                               class="w-full pl-10 pr-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                               placeholder="Nhập tên đăng nhập">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-dark-600 mb-1.5">Mật khẩu</label>
+                    <div class="relative">
+                        <i data-lucide="lock" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400"></i>
+                        <input type="password" name="password" id="password" required autocomplete="current-password"
+                               class="w-full pl-10 pr-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                               placeholder="Nhập mật khẩu">
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3.5 bg-dark-900 text-white font-semibold rounded-xl hover:bg-primary-600 transition-all shadow-lg">
+                    Đăng nhập
+                </button>
+            </form>
+
+            <!-- Demo accounts -->
+            <div class="mt-6 pt-6 border-t border-dark-100">
+                <p class="text-xs text-dark-400 text-center mb-3">Tài khoản demo để test:</p>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="bg-dark-50 rounded-lg p-2.5 text-center">
+                        <p class="font-medium text-dark-600">minh_anh</p>
+                        <p class="text-dark-400">password123</p>
+                    </div>
+                    <div class="bg-dark-50 rounded-lg p-2.5 text-center">
+                        <p class="font-medium text-dark-600">duc_huy</p>
+                        <p class="text-dark-400">password123</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Register Link -->
+        <p class="text-center text-sm text-dark-500 mt-6">
+            Chưa có tài khoản? 
+            <a href="{{ url_for('register') }}" class="text-primary-600 font-medium hover:text-primary-700">Đăng ký ngay</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Đăng ký{% endblock %}
+
+{% block content %}
+<div class="min-h-[70vh] flex items-center justify-center py-12 px-4">
+    <div class="w-full max-w-md">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <a href="{{ url_for('index') }}" class="font-display text-3xl font-bold text-dark-900">LUXE</a>
+            <h2 class="mt-4 text-xl font-semibold text-dark-800">Tạo tài khoản mới</h2>
+            <p class="text-sm text-dark-400 mt-1">Đăng ký để mua sắm và nhận nhiều ưu đãi</p>
+        </div>
+
+        <!-- Form -->
+        <div class="bg-white border border-dark-100 rounded-2xl p-6 sm:p-8 shadow-sm">
+            <form method="POST" action="{{ url_for('register') }}" class="space-y-5">
+                <div>
+                    <label for="full_name" class="block text-sm font-medium text-dark-600 mb-1.5">Họ và tên</label>
+                    <div class="relative">
+                        <i data-lucide="user" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400"></i>
+                        <input type="text" name="full_name" id="full_name"
+                               class="w-full pl-10 pr-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                               placeholder="Nguyễn Văn A">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="username" class="block text-sm font-medium text-dark-600 mb-1.5">Tên đăng nhập *</label>
+                    <div class="relative">
+                        <i data-lucide="at-sign" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400"></i>
+                        <input type="text" name="username" id="username" required autocomplete="username"
+                               class="w-full pl-10 pr-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                               placeholder="Chọn tên đăng nhập">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="email" class="block text-sm font-medium text-dark-600 mb-1.5">Email *</label>
+                    <div class="relative">
+                        <i data-lucide="mail" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400"></i>
+                        <input type="email" name="email" id="email" required autocomplete="email"
+                               class="w-full pl-10 pr-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                               placeholder="email@example.com">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-dark-600 mb-1.5">Mật khẩu * <span class="text-dark-400">(tối thiểu 6 ký tự)</span></label>
+                    <div class="relative">
+                        <i data-lucide="lock" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400"></i>
+                        <input type="password" name="password" id="password" required minlength="6" autocomplete="new-password"
+                               class="w-full pl-10 pr-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                               placeholder="Tạo mật khẩu">
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3.5 bg-dark-900 text-white font-semibold rounded-xl hover:bg-primary-600 transition-all shadow-lg">
+                    Đăng ký
+                </button>
+            </form>
+        </div>
+
+        <!-- Login Link -->
+        <p class="text-center text-sm text-dark-500 mt-6">
+            Đã có tài khoản? 
+            <a href="{{ url_for('login') }}" class="text-primary-600 font-medium hover:text-primary-700">Đăng nhập</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
