@@ -348,6 +348,195 @@ class RecommendationEngine:
         products.sort(key=lambda p: id_order.get(p.id, 999))
         return products
 
+    # ========================================================
+    #  5. HYBRID RECOMMENDATION (Switching + Weighted)
+    #  Kết hợp thông minh các thuật toán theo tình huống user
+    # ========================================================
+
+    # Trọng số Weighted Hybrid (tổng = 1.0)
+    WEIGHT_CF      = 0.50
+    WEIGHT_CONTENT = 0.30
+    WEIGHT_POPULAR = 0.20
+
+    # Ngưỡng tối thiểu để dùng CF
+    CF_MIN_INTERACTIONS = 3
+
+    def _normalize_scores(self, scores):
+        """Normalize dict scores về [0, 1]."""
+        if not scores:
+            return {}
+        max_val = max(scores.values()) or 1
+        return {k: v / max_val for k, v in scores.items()}
+
+    def _get_content_scores_for_user(self, interacted_ids, exclude_ids):
+        """
+        Tính Content-based score cho user dựa trên trung bình TF-IDF
+        vector của các sản phẩm user đã tương tác.
+        Trả về dict {product_id: score}.
+        """
+        if self._tfidf_matrix is None:
+            self._compute_tfidf_matrix()
+        if self._tfidf_matrix is None:
+            return {}
+
+        indices = [
+            self._product_ids.index(pid)
+            for pid in interacted_ids
+            if pid in self._product_ids
+        ]
+        if not indices:
+            return {}
+
+        # Vector trung bình = user profile
+        import numpy as np
+        user_profile = np.asarray(self._tfidf_matrix[indices].mean(axis=0))
+        sims = cosine_similarity(user_profile, self._tfidf_matrix).flatten()
+
+        return {
+            self._product_ids[i]: float(sims[i])
+            for i in range(len(sims))
+            if self._product_ids[i] not in exclude_ids
+        }
+
+    def _get_popular_scores(self, exclude_ids):
+        """
+        Tính Popular score normalize về [0,1].
+        Trả về dict {product_id: score}.
+        """
+        from sqlalchemy import func
+        rows = db.session.query(
+            UserInteraction.product_id,
+            func.count(UserInteraction.id).label("cnt"),
+        ).group_by(UserInteraction.product_id).all()
+
+        if not rows:
+            return {}
+        max_cnt = max(cnt for _, cnt in rows) or 1
+        return {
+            pid: cnt / max_cnt
+            for pid, cnt in rows
+            if pid not in exclude_ids
+        }
+
+    def _get_cf_scores(self, user_id, exclude_ids):
+        """
+        Tính Collaborative Filtering score.
+        Tái sử dụng logic từ get_personalized_recommendations.
+        Trả về dict {product_id: score}.
+        """
+        result = self._build_user_item_matrix()
+        if result is None or result[0] is None:
+            return {}
+
+        user_item_matrix, _ = result
+        if user_id not in user_item_matrix.index:
+            return {}
+
+        user_similarity = cosine_similarity(user_item_matrix)
+        user_sim_df = pd.DataFrame(
+            user_similarity,
+            index=user_item_matrix.index,
+            columns=user_item_matrix.index,
+        )
+        sim_scores   = user_sim_df.loc[user_id].drop(user_id)
+        similar_users = sim_scores.sort_values(ascending=False)
+
+        user_interacted = set(
+            user_item_matrix.loc[user_id][user_item_matrix.loc[user_id] > 0].index.tolist()
+        )
+
+        cf_scores = {}
+        for other_id, similarity in similar_users.items():
+            if similarity <= 0:
+                continue
+            other_items = user_item_matrix.loc[other_id]
+            for pid, score in other_items[other_items >= 3.0].items():
+                if pid not in user_interacted and pid not in exclude_ids:
+                    cf_scores[pid] = cf_scores.get(pid, 0) + similarity * score
+
+        return cf_scores
+
+    def get_hybrid_recommendations(self, user_id, top_n=12):
+        """
+        HYBRID RECOMMENDATION — Switching ưu tiên, fallback về Weighted Hybrid.
+
+        Chiến lược Switching:
+          - user_interaction < CF_MIN_INTERACTIONS (user mới) → Content-based
+          - Ngược lại                                         → Collaborative Filtering
+
+        Nếu thuật toán chính không đủ top_n kết quả → Weighted Hybrid bổ sung:
+          score = CF×0.5 + Content×0.3 + Popular×0.2
+
+        Fallback cuối: Popular / Featured products.
+
+        Returns: (List[Product], str) — danh sách sản phẩm + tên thuật toán đã dùng
+        """
+        interaction_count = UserInteraction.query.filter_by(user_id=user_id).count()
+        interacted        = UserInteraction.query.filter_by(user_id=user_id).all()
+        interacted_ids    = list({i.product_id for i in interacted})
+        exclude_ids       = set(interacted_ids)
+
+        # ── Tầng 1A: User mới → Content-based ──────────────────────────
+        if interaction_count < self.CF_MIN_INTERACTIONS:
+            algorithm = "content_based"
+            if interacted_ids:
+                scores     = self._get_content_scores_for_user(interacted_ids, exclude_ids)
+                sorted_ids = sorted(scores, key=scores.get, reverse=True)[:top_n]
+                products   = self._ids_to_products(sorted_ids)
+            else:
+                products = []
+
+        # ── Tầng 1B: User có lịch sử → Collaborative Filtering ─────────
+        else:
+            algorithm = "collaborative_filtering"
+            cf_scores  = self._get_cf_scores(user_id, exclude_ids)
+            sorted_ids = sorted(cf_scores, key=cf_scores.get, reverse=True)[:top_n]
+            products   = self._ids_to_products(sorted_ids)
+
+            if not cf_scores:
+                algorithm = "weighted_hybrid"
+                products  = []
+
+        # ── Tầng 2: Bổ sung bằng Weighted Hybrid nếu chưa đủ ──────────
+        if len(products) < top_n:
+            algorithm   = "weighted_hybrid"
+            need        = top_n - len(products)
+            new_exclude = exclude_ids | {p.id for p in products}
+
+            cf_s      = self._normalize_scores(self._get_cf_scores(user_id, new_exclude))
+            content_s = self._normalize_scores(
+                self._get_content_scores_for_user(interacted_ids, new_exclude)
+            )
+            popular_s = self._normalize_scores(self._get_popular_scores(new_exclude))
+
+            all_pids = set(cf_s) | set(content_s) | set(popular_s)
+            weighted = {
+                pid: (
+                    self.WEIGHT_CF      * cf_s.get(pid, 0) +
+                    self.WEIGHT_CONTENT * content_s.get(pid, 0) +
+                    self.WEIGHT_POPULAR * popular_s.get(pid, 0)
+                )
+                for pid in all_pids
+            }
+            hybrid_ids = sorted(weighted, key=weighted.get, reverse=True)[:need]
+            products.extend(self._ids_to_products(hybrid_ids))
+
+        # ── Tầng 3: Fallback Popular ────────────────────────────────────
+        if len(products) < top_n:
+            skip     = exclude_ids | {p.id for p in products}
+            products.extend(self._get_popular_products(top_n - len(products), exclude_ids=skip))
+
+        return products[:top_n], algorithm
+
+    def _ids_to_products(self, product_ids):
+        """Query và sắp xếp products theo thứ tự đã cho."""
+        if not product_ids:
+            return []
+        products = Product.query.filter(Product.id.in_(product_ids)).all()
+        order    = {pid: i for i, pid in enumerate(product_ids)}
+        products.sort(key=lambda p: order.get(p.id, 999))
+        return products
+
     def invalidate_cache(self):
         """Xóa cache TF-IDF khi có sản phẩm mới"""
         self._tfidf_matrix = None

@@ -25,7 +25,7 @@ def create_app():
     # Cấu hình
     basedir = os.path.abspath(os.path.dirname(__file__))
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "luxe-fashion-secret-key-change-in-production")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "ecommerce.db")
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     # Khởi tạo extensions
@@ -479,6 +479,14 @@ def create_app():
         # Trending / Popular
         popular = recommendation_engine._get_popular_products(top_n=8)
 
+        # Hybrid Recommendation
+        hybrid_products = []
+        hybrid_algo = "popular"
+        if current_user.is_authenticated:
+            hybrid_products, hybrid_algo = recommendation_engine.get_hybrid_recommendations(
+                current_user.id, top_n=8
+            )
+
         return render_template(
             "recommendations.html",
             stats=stats,
@@ -489,6 +497,8 @@ def create_app():
             similar_products=similar_products,
             also_bought=also_bought,
             popular=popular,
+            hybrid_products=hybrid_products,
+            hybrid_algo=hybrid_algo,
         )
 
     # ========================================================
