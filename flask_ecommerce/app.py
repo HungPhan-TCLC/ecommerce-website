@@ -511,10 +511,55 @@ def create_app():
     @app.route("/orders")
     @login_required
     def order_history():
-        orders = Order.query.filter_by(user_id=current_user.id).order_by(
-            Order.created_at.desc()
-        ).all()
-        return render_template("orders.html", orders=orders)
+        from sqlalchemy import func
+
+        status_filter = request.args.get("status", "all").strip()
+
+        # ── Đếm theo từng status bằng SQL GROUP BY (chính xác 100%) ──
+        raw_counts = db.session.query(
+            Order.status,
+            func.count(Order.id).label("cnt")
+        ).filter(
+            Order.user_id == current_user.id
+        ).group_by(Order.status).all()
+
+        # Tổng hợp thành dict, mọi status không được map sẽ vào "other"
+        status_map = {row.status: row.cnt for row in raw_counts}
+        total = sum(status_map.values())
+
+        counts = {
+            "all":             total,
+            "pending_payment": status_map.get("pending_payment", 0),
+            "payment_failed":  status_map.get("payment_failed",  0),
+            "confirmed":       status_map.get("confirmed",       0),
+            "shipped":         status_map.get("shipped",         0),
+            "delivered":       status_map.get("delivered",       0),
+            # Gộp "pending" (legacy) vào "cancelled" để không mất đơn
+            "cancelled": status_map.get("cancelled", 0) + status_map.get("pending", 0),
+        }
+
+        # ── Lấy danh sách đơn hàng theo filter ──
+        base_q = Order.query.filter_by(user_id=current_user.id)
+
+        if status_filter == "cancelled":
+            # Gộp cả "pending" legacy vào tab Đã hủy
+            orders = base_q.filter(
+                Order.status.in_(["cancelled", "pending"])
+            ).order_by(Order.created_at.desc()).all()
+        elif status_filter != "all":
+            orders = base_q.filter_by(
+                status=status_filter
+            ).order_by(Order.created_at.desc()).all()
+        else:
+            orders = base_q.order_by(Order.created_at.desc()).all()
+
+        return render_template(
+            "orders.html",
+            orders=orders,
+            status_filter=status_filter,
+            counts=counts,
+        )
+
 
     # ========================================================
     #  TRANG GỢI Ý AI (RECOMMENDATION PAGE)
@@ -786,6 +831,102 @@ def create_app():
             total_reviews=total_reviews,
             recent_orders=recent_orders,
         )
+
+    # ========================================================
+    #  THANH TOÁN LẠI CHO ĐƠN PENDING_PAYMENT
+    # ========================================================
+    @app.route("/order/<int:order_id>/retry-payment", methods=["GET", "POST"])
+    @login_required
+    def retry_payment(order_id):
+        """Cho phép user thanh toán lại đơn hàng đang ở trạng thái pending_payment."""
+        order = Order.query.get_or_404(order_id)
+
+        # Chỉ user sở hữu đơn mới được retry
+        if order.user_id != current_user.id:
+            flash("Không có quyền truy cập.", "error")
+            return redirect(url_for("order_history"))
+
+        RETRYABLE_STATUSES = ("pending_payment", "payment_failed")
+        if order.status not in RETRYABLE_STATUSES:
+            flash("\u0110ơn hàng này không thể thanh toán lại.", "info")
+            return redirect(url_for("order_history"))
+
+        if request.method == "POST":
+            method = request.form.get("method")
+
+            # Lưu lại thông tin giao hàng vào session
+            session["pending_order"] = {
+                "full_name": order.full_name,
+                "phone":     order.phone,
+                "address":   order.address,
+                "note":      order.note or "",
+            }
+
+            if method == "momo":
+                pay_url, message = momo_create_payment(
+                    order_id=order.id,
+                    amount=order.total_amount,
+                    order_info=f"Thanh toan don hang LUXE #{order.id}",
+                )
+                if pay_url:
+                    session["momo_order_id"] = order.id
+                    return redirect(pay_url)
+                else:
+                    flash(f"Không thể kết nối MoMo: {message}", "error")
+
+            elif method == "vnpay":
+                client_ip  = request.headers.get("X-Forwarded-For", request.remote_addr)
+                payment_url = vnpay_create_payment_url(
+                    order_id=order.id,
+                    amount=order.total_amount,
+                    order_info=f"Thanh toan don hang LUXE #{order.id}",
+                    client_ip=client_ip,
+                )
+                session["vnpay_order_id"] = order.id
+                return redirect(payment_url)
+
+            elif method == "cod":
+                order.status         = "confirmed"
+                order.payment_method = "cod"
+                db.session.commit()
+
+                # Xóa giỏ hàng + ghi interaction
+                CartItem.query.filter_by(user_id=current_user.id).delete()
+                for item in order.items:
+                    db.session.add(UserInteraction(
+                        user_id=current_user.id,
+                        product_id=item.product_id,
+                        interaction_type="purchase",
+                        rating=5.0,
+                    ))
+                db.session.commit()
+                recommendation_engine.invalidate_cache()
+                session.pop("pending_order", None)
+
+                flash("Đặt hàng thành công! Thanh toán khi nhận hàng.", "success")
+                return render_template("order_success.html", order=order, payment_method="COD")
+
+            return redirect(url_for("retry_payment", order_id=order_id))
+
+        return render_template("retry_payment.html", order=order)
+
+
+    @app.route("/order/<int:order_id>/cancel", methods=["POST"])
+    @login_required
+    def cancel_pending_order(order_id):
+        """Cho phép user tự hủy đơn đang ở trạng thái pending_payment."""
+        order = Order.query.get_or_404(order_id)
+        if order.user_id != current_user.id:
+            flash("Không có quyền truy cập.", "error")
+            return redirect(url_for("order_history"))
+        RETRYABLE_STATUSES = ("pending_payment", "payment_failed")
+        if order.status not in RETRYABLE_STATUSES:
+            flash("Chỉ có thể hủy đơn hàng đang chờ thanh toán.", "warning")
+            return redirect(url_for("order_history"))
+        order.status = "cancelled"
+        db.session.commit()
+        flash(f"Đã hủy đơn hàng #{order.id}.", "success")
+        return redirect(url_for("order_history"))
 
     # ========================================================
     #  ADMIN - DECORATOR & MIDDLEWARE
@@ -1252,6 +1393,10 @@ def create_app():
                 price=item.product.price,
             ))
 
+        # Xóa giỏ hàng ngay khi tạo đơn — dù thanh toán thành công hay thất bại
+        # cart sẽ không còn nữa và đơn sẽ xuất hiện trong "Đơn hàng của tôi"
+        CartItem.query.filter_by(user_id=current_user.id).delete()
+
         db.session.commit()
 
         # Lưu order_id vào session để xử lý khi VNPay callback
@@ -1309,12 +1454,19 @@ def create_app():
             return render_template("order_success.html", order=order, payment_method="VNPay")
 
         else:
-            # Thanh toán thất bại → hủy order, trả hàng về giỏ
+            # Thanh toán thất bại / bị hủy → đánh dấu payment_failed
+            # Giỏ hàng đã bị xóa từ lúc tạo đơn, đơn hàng vẫn ở trong lịch sử
             reason = VNPAY_RESPONSE_CODES.get(response_code, "Giao dịch thất bại")
-            order.status = "cancelled"
+            order.status = "payment_failed"
+            order.payment_method = "vnpay"
             db.session.commit()
-            flash(f"Thanh toán VNPay thất bại: {reason}. Đơn hàng đã bị hủy.", "error")
-            return redirect(url_for("cart"))
+            session.pop("pending_order", None)
+            session.pop("vnpay_order_id", None)
+            if response_code == "24":
+                flash(f"Bạn đã hủy thanh toán VNPay. Đơn hàng #{order.id} đã được lưu — bạn có thể thanh toán lại.", "warning")
+            else:
+                flash(f"Thanh toán VNPay thất bại: {reason}. Đơn hàng #{order.id} đã được lưu — bạn có thể thanh toán lại.", "error")
+            return redirect(url_for("order_history"))
 
     # ========================================================
     #  MOMO - TẠO LINK THANH TOÁN
@@ -1372,6 +1524,10 @@ def create_app():
                 price=item.product.price,
             ))
 
+        # Xóa giỏ hàng ngay khi tạo đơn — dù thanh toán thành công hay thất bại
+        # cart sẽ không còn nữa và đơn sẽ xuất hiện trong "Đơn hàng của tôi"
+        CartItem.query.filter_by(user_id=current_user.id).delete()
+
         db.session.commit()
         session["momo_order_id"] = order.id
 
@@ -1384,10 +1540,10 @@ def create_app():
         if pay_url:
             return redirect(pay_url)
         else:
-            order.status = "cancelled"
+            order.status = "payment_failed"
             db.session.commit()
-            flash(f"Không thể kết nối MoMo: {message}", "error")
-            return redirect(url_for("cart"))
+            flash(f"Không thể kết nối MoMo: {message}. Đơn hàng #{order.id} đã được lưu.", "error")
+            return redirect(url_for("order_history"))
 
     # ========================================================
     #  MOMO - XỬ LÝ KẾT QUẢ RETURN
@@ -1429,10 +1585,18 @@ def create_app():
             return render_template("order_success.html", order=order, payment_method="MoMo")
 
         else:
-            order.status = "cancelled"
+            # Giữ pending_payment để user có thể thanh toán lại
+            order.status = "pending_payment"
             db.session.commit()
-            flash("Thanh toán MoMo thất bại hoặc bị hủy. Đơn hàng đã bị hủy.", "error")
-            return redirect(url_for("cart"))
+            session.pop("momo_order_id", None)
+
+            # MoMo result_code 49 = user chủ động hủy
+            if result_code == 49:
+                flash("Bạn đã hủy thanh toán MoMo. Đơn hàng vẫn được giữ lại — bạn có thể thanh toán lại.", "warning")
+            else:
+                flash("Thanh toán MoMo thất bại. Đơn hàng vẫn được giữ lại — bạn có thể thanh toán lại.", "error")
+            # Redirect thẳng đến trang retry_payment để tiện thanh toán lại
+            return redirect(url_for("retry_payment", order_id=order.id))
 
     # ========================================================
     #  MOMO - IPN (server-to-server notify, tùy chọn)
