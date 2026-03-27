@@ -69,20 +69,20 @@
 
     <!-- ── Status Tabs ── -->
     {% set tabs = [
-        ("all",             "Tất cả",              "layers",       counts.all),
-        ("pending_payment", "Chờ thanh toán",       "clock",        counts.pending_payment),
-        ("payment_failed",  "Thanh toán lỗi",       "alert-circle", counts.payment_failed),
-        ("confirmed",       "Đã xác nhận",          "check-circle", counts.confirmed),
-        ("shipped",         "Đang giao",            "truck",        counts.shipped),
-        ("delivered",       "Đã giao",              "package-check",counts.delivered),
-        ("cancelled",       "Đã hủy",               "x-circle",     counts.cancelled),
+        ("all",             "Tất cả",            "layers",        counts.all,             true),
+        ("pending_payment", "Chờ thanh toán",     "clock",         counts.pending_payment, true),
+        ("payment_failed",  "Thanh toán lỗi",     "alert-circle",  counts.payment_failed,  false),
+        ("confirmed",       "Chờ giao hàng",      "package",       counts.confirmed,       true),
+        ("shipped",         "Đang giao",          "truck",         counts.shipped,         false),
+        ("delivered",       "Hoàn thành",         "package-check", counts.delivered,       true),
+        ("cancelled",       "Đã hủy",             "x-circle",      counts.cancelled,       false),
     ] %}
 
     <div class="bg-white border border-dark-100 rounded-2xl mb-6 shadow-sm">
         <div class="tabs-scroll">
             <div class="flex border-b border-dark-100 px-2">
-                {% for key, label, icon, count in tabs %}
-                {% if count > 0 or key == 'all' %}
+                {% for key, label, icon, count, always_show in tabs %}
+                {% if always_show or count > 0 %}
                 <a href="{{ url_for('order_history') }}?status={{ key }}"
                    class="order-tab {% if status_filter == key %}active{% endif %}">
                     <i data-lucide="{{ icon }}" class="w-3.5 h-3.5 flex-shrink-0"></i>
@@ -106,7 +106,7 @@
             <!-- Card Header -->
             <div class="flex items-center justify-between px-5 py-3.5 bg-slate-50 border-b border-dark-100">
                 <div class="flex items-center gap-4 text-sm">
-                    <span class="font-semibold text-dark-800">#{{ order.id }}</span>
+                    <span class="font-semibold text-dark-800">Đơn #{{ order_seq[order.id] }}</span>
                     <span class="text-dark-400 flex items-center gap-1">
                         <i data-lucide="calendar" class="w-3 h-3"></i>
                         {{ order.created_at.strftime('%d/%m/%Y %H:%M') }}
@@ -243,9 +243,9 @@
             {% if status_filter == 'all' %}Chưa có đơn hàng nào
             {% elif status_filter == 'pending_payment' %}Không có đơn chờ thanh toán
             {% elif status_filter == 'payment_failed' %}Không có đơn thanh toán lỗi
-            {% elif status_filter == 'confirmed' %}Không có đơn đã xác nhận
+            {% elif status_filter == 'confirmed' %}Không có đơn chờ giao hàng
             {% elif status_filter == 'shipped' %}Không có đơn đang giao
-            {% elif status_filter == 'delivered' %}Chưa có đơn nào được giao
+            {% elif status_filter == 'delivered' %}Chưa có đơn hoàn thành
             {% elif status_filter == 'cancelled' %}Không có đơn đã hủy
             {% else %}Không có đơn hàng{% endif %}
         </h2>

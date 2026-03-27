@@ -553,11 +553,19 @@ def create_app():
         else:
             orders = base_q.order_by(Order.created_at.desc()).all()
 
+        # ── Tính STT đơn hàng của từng user (nhất quán khi lọc tab) ──
+        # Sắp xếp ASC → đơn cũ nhất = #1, mới nhất = #N
+        all_user_orders_asc = Order.query.filter_by(
+            user_id=current_user.id
+        ).order_by(Order.created_at.asc()).all()
+        order_seq = {o.id: i + 1 for i, o in enumerate(all_user_orders_asc)}
+
         return render_template(
             "orders.html",
             orders=orders,
             status_filter=status_filter,
             counts=counts,
+            order_seq=order_seq,
         )
 
 
