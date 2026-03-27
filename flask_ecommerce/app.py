@@ -152,21 +152,123 @@ def create_app():
     # ========================================================
     @app.route("/search")
     def search():
-        query = request.args.get("q", "").strip()
-        if not query:
-            return redirect(url_for("index"))
+        q = request.args.get("q", "").strip()
 
-        # Tìm kiếm trong tên, mô tả, tags
-        search_term = f"%{query}%"
-        products = Product.query.filter(
-            db.or_(
-                Product.name.ilike(search_term),
-                Product.description.ilike(search_term),
-                Product.tags.ilike(search_term),
+        # ── Filter params ──
+        category_filter = request.args.get("category", "").strip()
+        gender_filter   = request.args.get("gender", "").strip()
+        style_filter    = request.args.get("style", "").strip()
+        price_min_raw   = request.args.get("price_min", "").strip()
+        price_max_raw   = request.args.get("price_max", "").strip()
+        sort_by         = request.args.get("sort", "relevant")
+
+        try:
+            price_min = float(price_min_raw) if price_min_raw else None
+        except ValueError:
+            price_min = None
+        try:
+            price_max = float(price_max_raw) if price_max_raw else None
+        except ValueError:
+            price_max = None
+
+        # ── Bắt đầu build query ──
+        product_query = Product.query
+
+        # Tìm theo từ khoá (bắt buộc nếu có q)
+        if q:
+            search_term = f"%{q}%"
+            product_query = product_query.filter(
+                db.or_(
+                    Product.name.ilike(search_term),
+                    Product.description.ilike(search_term),
+                    Product.tags.ilike(search_term),
+                )
             )
-        ).all()
 
-        return render_template("search.html", products=products, query=query)
+        # Filter theo danh mục
+        if category_filter:
+            try:
+                product_query = product_query.filter(
+                    Product.category_id == int(category_filter)
+                )
+            except ValueError:
+                pass
+
+        # Filter theo giới tính
+        if gender_filter in ("nam", "nu", "unisex"):
+            product_query = product_query.filter(Product.gender == gender_filter)
+
+        # Filter theo phong cách
+        if style_filter:
+            product_query = product_query.filter(
+                Product.style.ilike(f"%{style_filter}%")
+            )
+
+        # Filter theo khoảng giá
+        if price_min is not None:
+            product_query = product_query.filter(Product.price >= price_min)
+        if price_max is not None:
+            product_query = product_query.filter(Product.price <= price_max)
+
+        # ── Sắp xếp ──
+        if sort_by == "price_asc":
+            product_query = product_query.order_by(Product.price.asc())
+        elif sort_by == "price_desc":
+            product_query = product_query.order_by(Product.price.desc())
+        elif sort_by == "newest":
+            product_query = product_query.order_by(Product.created_at.desc())
+        else:
+            # Mặc định: relevant (theo tên)
+            product_query = product_query.order_by(Product.name.asc())
+
+        products = product_query.all()
+
+        # ── Dữ liệu cho sidebar filter ──
+        all_categories = Category.query.order_by(Category.name).all()
+        gender_options = [
+            {"value": "nam",    "label": "Nam"},
+            {"value": "nu",     "label": "Nữ"},
+            {"value": "unisex", "label": "Unisex"},
+        ]
+        style_options = [
+            {"value": "casual",     "label": "Casual"},
+            {"value": "formal",     "label": "Formal"},
+            {"value": "streetwear", "label": "Streetwear"},
+            {"value": "sporty",     "label": "Sporty"},
+        ]
+
+        # Tổng hợp filter đang active (để hiển thị badges)
+        active_filters = {}
+        if category_filter:
+            cat_obj = Category.query.get(int(category_filter)) if category_filter.isdigit() else None
+            if cat_obj:
+                active_filters["category"] = {"label": cat_obj.name, "value": category_filter}
+        if gender_filter:
+            label_map = {"nam": "Nam", "nu": "Nữ", "unisex": "Unisex"}
+            active_filters["gender"] = {"label": label_map.get(gender_filter, gender_filter), "value": gender_filter}
+        if style_filter:
+            active_filters["style"] = {"label": style_filter.capitalize(), "value": style_filter}
+        if price_min is not None:
+            active_filters["price_min"] = {"label": f"Từ {int(price_min):,}₫".replace(",", "."), "value": price_min_raw}
+        if price_max is not None:
+            active_filters["price_max"] = {"label": f"Đến {int(price_max):,}₫".replace(",", "."), "value": price_max_raw}
+
+        return render_template(
+            "search.html",
+            products=products,
+            query=q,
+            all_categories=all_categories,
+            gender_options=gender_options,
+            style_options=style_options,
+            active_filters=active_filters,
+            # current filter values (để giữ trạng thái form)
+            category_filter=category_filter,
+            gender_filter=gender_filter,
+            style_filter=style_filter,
+            price_min=price_min_raw,
+            price_max=price_max_raw,
+            sort_by=sort_by,
+        )
 
     # ========================================================
     #  ĐĂNG KÝ
@@ -604,6 +706,87 @@ def create_app():
             "algorithm": "co_purchase_analysis",
         })
 
+
+    # ========================================================
+    #  TRANG THÔNG TIN TÀI KHOẢN
+    # ========================================================
+    @app.route("/profile", methods=["GET", "POST"])
+    @login_required
+    def profile():
+        if request.method == "POST":
+            action = request.form.get("action")
+
+            # ── Cập nhật thông tin cá nhân ──
+            if action == "update_info":
+                full_name = request.form.get("full_name", "").strip()
+                email     = request.form.get("email", "").strip()
+
+                if not email:
+                    flash("Email không được để trống.", "error")
+                    return redirect(url_for("profile"))
+
+                # Kiểm tra email trùng với user khác
+                existing = User.query.filter(
+                    User.email == email,
+                    User.id != current_user.id
+                ).first()
+                if existing:
+                    flash("Email này đã được sử dụng bởi tài khoản khác.", "error")
+                    return redirect(url_for("profile"))
+
+                current_user.full_name = full_name
+                current_user.email     = email
+                db.session.commit()
+                flash("Cập nhật thông tin thành công!", "success")
+
+            # ── Đổi mật khẩu ──
+            elif action == "change_password":
+                current_pw  = request.form.get("current_password", "")
+                new_pw      = request.form.get("new_password", "")
+                confirm_pw  = request.form.get("confirm_password", "")
+
+                if not check_password_hash(current_user.password_hash, current_pw):
+                    flash("Mật khẩu hiện tại không đúng.", "error")
+                    return redirect(url_for("profile"))
+
+                if len(new_pw) < 6:
+                    flash("Mật khẩu mới phải có ít nhất 6 ký tự.", "error")
+                    return redirect(url_for("profile"))
+
+                if new_pw != confirm_pw:
+                    flash("Mật khẩu xác nhận không khớp.", "error")
+                    return redirect(url_for("profile"))
+
+                current_user.password_hash = generate_password_hash(new_pw)
+                db.session.commit()
+                flash("Đổi mật khẩu thành công!", "success")
+
+            return redirect(url_for("profile"))
+
+        # Thống kê tài khoản
+        total_orders    = Order.query.filter_by(user_id=current_user.id).count()
+        total_spent     = db.session.query(
+            db.func.sum(Order.total_amount)
+        ).filter(
+            Order.user_id   == current_user.id,
+            Order.status.in_(["confirmed", "shipped", "delivered"]),
+        ).scalar() or 0
+        total_reviews   = UserInteraction.query.filter(
+            UserInteraction.user_id == current_user.id,
+            UserInteraction.rating.isnot(None),
+        ).count()
+        recent_orders   = Order.query.filter_by(
+            user_id=current_user.id
+        ).order_by(Order.created_at.desc()).limit(5).all()
+
+        return render_template(
+            "profile.html",
+            total_orders=total_orders,
+            total_spent=total_spent,
+            total_reviews=total_reviews,
+            recent_orders=recent_orders,
+        )
+
     # ========================================================
     #  ADMIN - DECORATOR & MIDDLEWARE
     # ========================================================
@@ -1033,18 +1216,33 @@ def create_app():
 
         total = sum(item.product.price * item.quantity for item in cart_items)
 
-        # Tạo Order với status="pending_payment"
-        order = Order(
+        # Tái sử dụng pending_payment order nếu đã có (tránh tạo đơn trùng khi quay lại)
+        existing_order = Order.query.filter_by(
             user_id=current_user.id,
-            total_amount=total,
             status="pending_payment",
-            full_name=pending["full_name"],
-            phone=pending["phone"],
-            address=pending["address"],
-            note=pending.get("note", ""),
-        )
-        db.session.add(order)
-        db.session.flush()
+        ).order_by(Order.created_at.desc()).first()
+
+        if existing_order:
+            OrderItem.query.filter_by(order_id=existing_order.id).delete()
+            existing_order.total_amount = total
+            existing_order.full_name    = pending["full_name"]
+            existing_order.phone        = pending["phone"]
+            existing_order.address      = pending["address"]
+            existing_order.note         = pending.get("note", "")
+            order = existing_order
+            db.session.flush()
+        else:
+            order = Order(
+                user_id=current_user.id,
+                total_amount=total,
+                status="pending_payment",
+                full_name=pending["full_name"],
+                phone=pending["phone"],
+                address=pending["address"],
+                note=pending.get("note", ""),
+            )
+            db.session.add(order)
+            db.session.flush()
 
         for item in cart_items:
             db.session.add(OrderItem(
@@ -1136,18 +1334,35 @@ def create_app():
 
         total = sum(item.product.price * item.quantity for item in cart_items)
 
-        # Tạo Order với status="pending_payment"
-        order = Order(
+        # Kiểm tra đã có pending_payment order chưa → tái sử dụng thay vì tạo mới
+        # Tránh tình huống user hủy MoMo rồi thử lại → đơn hàng tăng lên
+        existing_order = Order.query.filter_by(
             user_id=current_user.id,
-            total_amount=total,
             status="pending_payment",
-            full_name=pending["full_name"],
-            phone=pending["phone"],
-            address=pending["address"],
-            note=pending.get("note", ""),
-        )
-        db.session.add(order)
-        db.session.flush()
+        ).order_by(Order.created_at.desc()).first()
+
+        if existing_order:
+            # Xóa order items cũ và tạo lại theo giỏ hàng hiện tại
+            OrderItem.query.filter_by(order_id=existing_order.id).delete()
+            existing_order.total_amount = total
+            existing_order.full_name    = pending["full_name"]
+            existing_order.phone        = pending["phone"]
+            existing_order.address      = pending["address"]
+            existing_order.note         = pending.get("note", "")
+            order = existing_order
+            db.session.flush()
+        else:
+            order = Order(
+                user_id=current_user.id,
+                total_amount=total,
+                status="pending_payment",
+                full_name=pending["full_name"],
+                phone=pending["phone"],
+                address=pending["address"],
+                note=pending.get("note", ""),
+            )
+            db.session.add(order)
+            db.session.flush()
 
         for item in cart_items:
             db.session.add(OrderItem(

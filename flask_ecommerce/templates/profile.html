@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Thông tin tài khoản{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center font-bold text-primary-600 text-sm flex-shrink-0">
+            {{ (current_user.full_name or current_user.username)[:2].upper() }}
+        </div>
+        <div>
+            <h1 class="font-display text-2xl font-bold text-dark-900">{{ current_user.full_name or current_user.username }}</h1>
+            <p class="text-sm text-dark-400">@{{ current_user.username }} · Thành viên từ {{ current_user.created_at.strftime('%m/%Y') }}</p>
+        </div>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="grid grid-cols-3 gap-4 mb-8">
+        <div class="bg-white rounded-xl border border-dark-100 p-4 text-center">
+            <div class="text-2xl font-bold text-dark-900">{{ total_orders }}</div>
+            <div class="text-xs text-dark-400 mt-1">Đơn hàng</div>
+        </div>
+        <div class="bg-white rounded-xl border border-dark-100 p-4 text-center">
+            <div class="text-lg font-bold text-primary-600">{{ total_spent | format_price }}</div>
+            <div class="text-xs text-dark-400 mt-1">Tổng chi tiêu</div>
+        </div>
+        <div class="bg-white rounded-xl border border-dark-100 p-4 text-center">
+            <div class="text-2xl font-bold text-amber-500">{{ total_reviews }}</div>
+            <div class="text-xs text-dark-400 mt-1">Đánh giá</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- LEFT: Forms -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <!-- Cập nhật thông tin -->
+            <div class="bg-white rounded-2xl border border-dark-100 p-6">
+                <h2 class="font-semibold text-dark-800 mb-5 flex items-center gap-2">
+                    <i data-lucide="user" class="w-4 h-4 text-dark-400"></i>
+                    Thông tin cá nhân
+                </h2>
+                <form method="POST">
+                    <input type="hidden" name="action" value="update_info">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-dark-600 mb-1.5">Tên đăng nhập</label>
+                            <input type="text" value="{{ current_user.username }}" disabled
+                                   class="w-full px-3 py-2.5 text-sm border border-dark-100 rounded-xl bg-dark-50 text-dark-400 cursor-not-allowed">
+                            <p class="text-xs text-dark-400 mt-1">Tên đăng nhập không thể thay đổi</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-dark-600 mb-1.5">Họ và tên</label>
+                            <input type="text" name="full_name"
+                                   value="{{ current_user.full_name or '' }}"
+                                   placeholder="Nguyễn Văn A"
+                                   class="w-full px-3 py-2.5 text-sm border border-dark-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-dark-600 mb-1.5">Email <span class="text-red-500">*</span></label>
+                            <input type="email" name="email"
+                                   value="{{ current_user.email }}"
+                                   required
+                                   class="w-full px-3 py-2.5 text-sm border border-dark-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400">
+                        </div>
+                    </div>
+                    <button type="submit"
+                            class="mt-5 flex items-center gap-2 px-5 py-2.5 bg-dark-900 text-white text-sm font-medium rounded-xl hover:bg-primary-600 transition-colors">
+                        <i data-lucide="save" class="w-4 h-4"></i>
+                        Lưu thay đổi
+                    </button>
+                </form>
+            </div>
+
+            <!-- Đổi mật khẩu -->
+            <div class="bg-white rounded-2xl border border-dark-100 p-6">
+                <h2 class="font-semibold text-dark-800 mb-5 flex items-center gap-2">
+                    <i data-lucide="lock" class="w-4 h-4 text-dark-400"></i>
+                    Đổi mật khẩu
+                </h2>
+                <form method="POST" id="pw-form">
+                    <input type="hidden" name="action" value="change_password">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-dark-600 mb-1.5">Mật khẩu hiện tại</label>
+                            <div class="relative">
+                                <input type="password" name="current_password" required
+                                       class="w-full px-3 py-2.5 text-sm border border-dark-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 pr-10"
+                                       id="cur-pw">
+                                <button type="button" onclick="togglePw('cur-pw', this)"
+                                        class="absolute right-3 top-2.5 text-dark-400 hover:text-dark-600">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-dark-600 mb-1.5">Mật khẩu mới</label>
+                            <div class="relative">
+                                <input type="password" name="new_password" required minlength="6"
+                                       class="w-full px-3 py-2.5 text-sm border border-dark-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 pr-10"
+                                       id="new-pw" oninput="checkStrength(this.value)">
+                                <button type="button" onclick="togglePw('new-pw', this)"
+                                        class="absolute right-3 top-2.5 text-dark-400 hover:text-dark-600">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                            <!-- Password strength bar -->
+                            <div class="mt-2 h-1 bg-dark-100 rounded-full overflow-hidden">
+                                <div id="pw-strength-bar" class="h-full rounded-full transition-all duration-300 w-0"></div>
+                            </div>
+                            <p id="pw-strength-text" class="text-xs text-dark-400 mt-1"></p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-dark-600 mb-1.5">Xác nhận mật khẩu mới</label>
+                            <div class="relative">
+                                <input type="password" name="confirm_password" required
+                                       class="w-full px-3 py-2.5 text-sm border border-dark-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 pr-10"
+                                       id="conf-pw" oninput="checkMatch()">
+                                <button type="button" onclick="togglePw('conf-pw', this)"
+                                        class="absolute right-3 top-2.5 text-dark-400 hover:text-dark-600">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                            <p id="match-text" class="text-xs mt-1"></p>
+                        </div>
+                    </div>
+                    <button type="submit"
+                            class="mt-5 flex items-center gap-2 px-5 py-2.5 bg-dark-900 text-white text-sm font-medium rounded-xl hover:bg-primary-600 transition-colors">
+                        <i data-lucide="key" class="w-4 h-4"></i>
+                        Đổi mật khẩu
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- RIGHT: Đơn hàng gần đây -->
+        <div class="space-y-4">
+            <div class="bg-white rounded-2xl border border-dark-100 p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold text-dark-800 text-sm">Đơn hàng gần đây</h3>
+                    <a href="{{ url_for('order_history') }}" class="text-xs text-primary-600 hover:underline">Xem tất cả</a>
+                </div>
+                {% if recent_orders %}
+                <div class="space-y-3">
+                    {% for order in recent_orders %}
+                    <div class="flex items-center justify-between py-2 border-b border-dark-50 last:border-0">
+                        <div>
+                            <p class="text-xs font-semibold text-dark-700">#{{ '%04d' % order.id }}</p>
+                            <p class="text-xs text-dark-400">{{ order.created_at.strftime('%d/%m/%Y') }}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-semibold text-dark-800">{{ order.total_amount | format_price }}</p>
+                            <span class="text-xs px-1.5 py-0.5 rounded-full
+                                {% if order.status == 'delivered' %}bg-emerald-100 text-emerald-600
+                                {% elif order.status == 'shipped' %}bg-blue-100 text-blue-600
+                                {% elif order.status == 'confirmed' %}bg-amber-100 text-amber-600
+                                {% elif order.status == 'cancelled' %}bg-red-100 text-red-600
+                                {% else %}bg-dark-100 text-dark-500{% endif %}">
+                                {% if order.status == 'pending' %}Chờ xử lý
+                                {% elif order.status == 'confirmed' %}Đã xác nhận
+                                {% elif order.status == 'shipped' %}Đang giao
+                                {% elif order.status == 'delivered' %}Đã giao
+                                {% elif order.status == 'cancelled' %}Đã hủy
+                                {% else %}{{ order.status }}{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-dark-400 text-center py-4">Chưa có đơn hàng nào</p>
+                {% endif %}
+            </div>
+
+            <!-- Quick links -->
+            <div class="bg-white rounded-2xl border border-dark-100 p-5">
+                <h3 class="font-semibold text-dark-800 text-sm mb-3">Truy cập nhanh</h3>
+                <div class="space-y-1">
+                    <a href="{{ url_for('order_history') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-dark-600 hover:bg-dark-50 transition-colors">
+                        <i data-lucide="package" class="w-4 h-4 text-dark-400"></i>
+                        Lịch sử đơn hàng
+                    </a>
+                    <a href="{{ url_for('recommendations') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-purple-600 hover:bg-purple-50 transition-colors">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        Gợi ý AI cho tôi
+                    </a>
+                    <a href="{{ url_for('index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-dark-600 hover:bg-dark-50 transition-colors">
+                        <i data-lucide="shopping-bag" class="w-4 h-4 text-dark-400"></i>
+                        Tiếp tục mua sắm
+                    </a>
+                    <a href="{{ url_for('logout') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                        Đăng xuất
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function togglePw(id, btn) {
+    const input = document.getElementById(id);
+    const icon  = btn.querySelector('i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.setAttribute('data-lucide', 'eye-off');
+    } else {
+        input.type = 'password';
+        icon.setAttribute('data-lucide', 'eye');
+    }
+    lucide.createIcons();
+}
+
+function checkStrength(pw) {
+    const bar  = document.getElementById('pw-strength-bar');
+    const text = document.getElementById('pw-strength-text');
+    let score  = 0;
+    if (pw.length >= 6)  score++;
+    if (pw.length >= 10) score++;
+    if (/[A-Z]/.test(pw)) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[^A-Za-z0-9]/.test(pw)) score++;
+
+    const levels = [
+        { w: '20%',  color: 'bg-red-400',    label: 'Rất yếu' },
+        { w: '40%',  color: 'bg-orange-400', label: 'Yếu' },
+        { w: '60%',  color: 'bg-amber-400',  label: 'Trung bình' },
+        { w: '80%',  color: 'bg-blue-400',   label: 'Mạnh' },
+        { w: '100%', color: 'bg-emerald-500',label: 'Rất mạnh' },
+    ];
+    const lvl = levels[Math.min(score, 4)];
+    bar.className  = `h-full rounded-full transition-all duration-300 ${lvl.color}`;
+    bar.style.width = lvl.w;
+    text.textContent = pw.length ? lvl.label : '';
+}
+
+function checkMatch() {
+    const newPw  = document.getElementById('new-pw').value;
+    const confPw = document.getElementById('conf-pw').value;
+    const text   = document.getElementById('match-text');
+    if (!confPw) { text.textContent = ''; return; }
+    if (newPw === confPw) {
+        text.textContent = 'Mật khẩu khớp';
+        text.className   = 'text-xs mt-1 text-emerald-600';
+    } else {
+        text.textContent = 'Mật khẩu không khớp';
+        text.className   = 'text-xs mt-1 text-red-500';
+    }
+}
+</script>
+{% endblock %}
