@@ -1,6 +1,6 @@
 <!-- _product_card.html - Component card sản phẩm dùng chung -->
 <div class="product-card group">
-    <a href="{{ url_for('product.product_detail', product_id=product.id) }}" class="block">
+    <a href="{{ url_for('product.product_detail', product_id=product.id) }}{% if source_tag is defined and source_tag %}?source={{ source_tag }}{% endif %}" class="block">
         <!-- Image -->
         <div class="relative aspect-[3/4] rounded-xl overflow-hidden bg-dark-100 mb-3">
             <img src="{{ product.image_url }}" alt="{{ product.name }}"

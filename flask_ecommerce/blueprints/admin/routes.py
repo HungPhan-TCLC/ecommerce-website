@@ -1,11 +1,11 @@
 """
-blueprints/admin/routes.py - Khu vực quản trị Admin
+bluprints/admin/routes.py - Khu vực quản trị Admin
 """
 
 from functools import wraps
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
-from models import db, Product, Category, Order, OrderItem, User, CartItem, UserInteraction
+from models import db, Product, Category, Order, OrderItem, User, CartItem, UserInteraction, EvaluationResult
 from recommendation import recommendation_engine
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -363,10 +363,66 @@ def admin_ai_stats():
         "purchase_interactions": UserInteraction.query.filter_by(interaction_type="purchase").count(),
     }
 
+    # ── Load kết quả evaluation gần nhất ───────────────────────────────────────────
+    latest_run_id = None
+    eval_results  = {}    # {algorithm: {metric_name: value}}
+    eval_computed_at = None
+    eval_num_users   = None
+    eval_k           = None
+    online_metrics   = {}
+
+    # Lấy run_id mới nhất
+    latest = EvaluationResult.query.order_by(EvaluationResult.computed_at.desc()).first()
+    if latest:
+        latest_run_id    = latest.run_id
+        eval_computed_at = latest.computed_at
+        eval_num_users   = latest.num_users_evaluated
+        eval_k           = latest.k_value
+
+        batch = EvaluationResult.query.filter_by(run_id=latest_run_id).all()
+        for row in batch:
+            if row.algorithm == "all":
+                online_metrics[row.metric_name] = row.metric_value
+            else:
+                if row.algorithm not in eval_results:
+                    eval_results[row.algorithm] = {}
+                eval_results[row.algorithm][row.metric_name] = round(row.metric_value, 4)
+
     return render_template(
         "admin/ai_stats.html",
         interaction_stats=interaction_stats,
         top_interacted=top_interacted,
         avg_ratings=avg_ratings,
         stats=stats,
+        # Evaluation results
+        eval_results=eval_results,
+        online_metrics=online_metrics,
+        eval_computed_at=eval_computed_at,
+        eval_num_users=eval_num_users,
+        eval_k=eval_k,
+        has_eval=bool(latest_run_id),
     )
+
+
+@admin_bp.route("/ai-stats/run-evaluation", methods=["POST"])
+@login_required
+@admin_required
+def admin_run_evaluation():
+    """
+    Trigger offline + online evaluation.
+    Admin click nút → chạy RecommendationEvaluator.run_full_evaluation(k=8)
+    → lưu vào DB → redirect về ai-stats với kết quả mới.
+    """
+    try:
+        from evaluation import recommendation_evaluator
+        results = recommendation_evaluator.run_full_evaluation(k=8)
+        num_users = results["offline"]["precision_recall"].get("num_users", 0)
+        flash(
+            f"✅ Đã chạy đánh giá thành công! Run ID: {results['run_id']} | "
+            f"Evaluated {num_users} users | K=8",
+            "success"
+        )
+    except Exception as exc:
+        flash(f"❌ Lỗi khi chạy đánh giá: {str(exc)}", "error")
+
+    return redirect(url_for("admin.admin_ai_stats"))

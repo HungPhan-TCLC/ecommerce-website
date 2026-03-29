@@ -112,6 +112,7 @@ class UserInteraction(db.Model):
     """
     Lưu lại tương tác của user với sản phẩm.
     interaction_type: 'view', 'cart', 'purchase', 'wishlist'
+    source: 'recommendation', 'search', 'direct', 'category', 'homepage'
     Dữ liệu này được dùng cho Collaborative Filtering / User-based Recommendation.
     """
     __tablename__ = 'user_interactions'
@@ -121,4 +122,23 @@ class UserInteraction(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     interaction_type = db.Column(db.String(20), nullable=False)  # view, cart, purchase
     rating = db.Column(db.Float, nullable=True)  # Rating 1-5 (optional)
+    source = db.Column(db.String(50), nullable=True)  # recommendation, search, direct, category, homepage
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ==================== EVALUATION RESULT MODEL (cho Metrics) ====================
+class EvaluationResult(db.Model):
+    """
+    Lưu kết quả đánh giá chất lượng recommendation system.
+    Mỗi lần admin chạy đánh giá → lưu 1 batch kết quả với cùng run_id.
+    """
+    __tablename__ = 'evaluation_results'
+
+    id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.String(50), nullable=False)          # UUID nhóm cùng 1 lần chạy
+    computed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    algorithm = db.Column(db.String(50), nullable=False)        # content_based, collaborative, hybrid, all
+    metric_name = db.Column(db.String(50), nullable=False)      # precision_at_k, recall_at_k, ndcg, coverage, diversity, ctr, ...
+    metric_value = db.Column(db.Float, nullable=False)
+    k_value = db.Column(db.Integer, nullable=True)              # K=8 (None nếu không liên quan đến K)
+    num_users_evaluated = db.Column(db.Integer, nullable=True)  # Số user được dùng trong offline eval

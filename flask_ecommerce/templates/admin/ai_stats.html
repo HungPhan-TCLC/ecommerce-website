@@ -1,7 +1,7 @@
 {% extends 'admin/base_admin.html' %}
 {% block title %}AI & Recommendation Stats{% endblock %}
 {% block page_title %}AI & Gợi ý sản phẩm{% endblock %}
-{% block page_subtitle %}Phân tích dữ liệu Recommendation System{% endblock %}
+{% block page_subtitle %}Phân tích & Đánh giá chất lượng Recommendation System{% endblock %}
 
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -9,7 +9,30 @@
 
 {% block content %}
 
-<!-- Stat cards -->
+<!-- ── Hành động: Nút Chạy Đánh Giá ────────────────────────────────────── -->
+<div class="flex items-center justify-between mb-6">
+    <div>
+        {% if has_eval and eval_computed_at %}
+        <p class="text-xs text-dark-400">
+            Lần đánh giá gần nhất: <span class="font-medium text-dark-600">{{ eval_computed_at.strftime('%d/%m/%Y %H:%M') }}</span>
+            {% if eval_num_users %}| <span class="text-purple-600 font-medium">{{ eval_num_users }} users</span>{% endif %}
+            {% if eval_k %}| K = <span class="font-medium">{{ eval_k }}</span>{% endif %}
+        </p>
+        {% else %}
+        <p class="text-xs text-amber-600 font-medium">⚠ Chưa có kết quả đánh giá. Hãy nhấn "Chạy Đánh Giá" để bắt đầu.</p>
+        {% endif %}
+    </div>
+    <form action="{{ url_for('admin.admin_run_evaluation') }}" method="POST" id="eval-form">
+        <button type="submit" id="eval-btn"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition-all shadow-sm"
+                onclick="this.disabled=true; this.innerHTML='<span>Đang chạy...</span>'; this.form.submit();">
+            <i data-lucide="play-circle" class="w-4 h-4"></i>
+            Chạy Đánh Giá (K=8)
+        </button>
+    </form>
+</div>
+
+<!-- ── Overview Cards ────────────────────────────────────────────────────── -->
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     {% set cards = [
         ('Tổng tương tác', stats.total_interactions, 'activity', 'purple'),
@@ -34,7 +57,180 @@
     {% endfor %}
 </div>
 
-<!-- Charts row -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!--  SECTION A: OFFLINE EVALUATION METRICS                               -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+{% if has_eval %}
+<div class="mb-6">
+    <div class="flex items-center gap-2 mb-4">
+        <div class="w-6 h-6 rounded-md bg-purple-100 flex items-center justify-center">
+            <i data-lucide="bar-chart-2" class="w-3.5 h-3.5 text-purple-600"></i>
+        </div>
+        <h2 class="font-semibold text-dark-800 text-sm uppercase tracking-wide">A — Offline Evaluation Metrics (K={{ eval_k }})</h2>
+    </div>
+
+    <!-- Metric comparison table per algorithm -->
+    {% set algorithms = [
+        ('content_based', 'Content-based', 'cyan'),
+        ('collaborative', 'Collaborative Filtering', 'purple'),
+        ('hybrid',        'Hybrid',        'emerald'),
+    ] %}
+    {% set metrics_defs = [
+        ('precision_at_k', 'Precision@K',  'Trong K gợi ý → % thực sự relevant', 'target'),
+        ('recall_at_k',    'Recall@K',     'Bắt được bao nhiêu % ground truth',   'search'),
+        ('hit_rate',       'Hit Rate@K',   '% users có ≥1 hit trong top K',        'check-circle'),
+        ('ndcg',           'NDCG@K',       'Precision có xét thứ hạng trong list', 'trending-up'),
+        ('catalog_coverage','Coverage',    '% sản phẩm được đề xuất ít nhất 1 lần','layout-grid'),
+        ('diversity',      'Diversity',    'Tỷ lệ category khác nhau trong batch', 'shuffle'),
+    ] %}
+
+    <!-- Per-algo cards -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+        {% for algo_key, algo_label, algo_color in algorithms %}
+        {% set algo_data = eval_results.get(algo_key, {}) %}
+        <div class="bg-white rounded-xl border border-dark-200 overflow-hidden">
+            <div class="px-4 py-3 border-b border-dark-100 flex items-center gap-2
+                {% if algo_color=='cyan' %}bg-cyan-50{% elif algo_color=='purple' %}bg-purple-50{% else %}bg-emerald-50{% endif %}">
+                <div class="w-6 h-6 rounded-md flex items-center justify-center
+                    {% if algo_color=='cyan' %}bg-cyan-100 text-cyan-700
+                    {% elif algo_color=='purple' %}bg-purple-100 text-purple-700
+                    {% else %}bg-emerald-100 text-emerald-700{% endif %}">
+                    <i data-lucide="{% if algo_key=='content_based' %}file-text{% elif algo_key=='collaborative' %}users{% else %}layers{% endif %}" class="w-3.5 h-3.5"></i>
+                </div>
+                <span class="text-sm font-semibold
+                    {% if algo_color=='cyan' %}text-cyan-800{% elif algo_color=='purple' %}text-purple-800{% else %}text-emerald-800{% endif %}">
+                    {{ algo_label }}
+                </span>
+            </div>
+            <div class="p-4 space-y-3">
+                {% for metric_key, metric_label, metric_desc, metric_icon in metrics_defs %}
+                {% set val = algo_data.get(metric_key) %}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="{{ metric_icon }}" class="w-3.5 h-3.5 text-dark-400 flex-shrink-0"></i>
+                        <div>
+                            <p class="text-xs font-medium text-dark-700">{{ metric_label }}</p>
+                            <p class="text-xs text-dark-400 hidden lg:block">{{ metric_desc }}</p>
+                        </div>
+                    </div>
+                    {% if val is not none %}
+                    <div class="flex items-center gap-2">
+                        <div class="w-16 h-1.5 bg-dark-100 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full
+                                {% if algo_color=='cyan' %}bg-cyan-500{% elif algo_color=='purple' %}bg-purple-500{% else %}bg-emerald-500{% endif %}"
+                                style="width: {{ (val * 100) | round(1) }}%"></div>
+                        </div>
+                        <span class="text-sm font-bold text-dark-800 w-12 text-right">{{ "%.4f"|format(val) }}</span>
+                    </div>
+                    {% else %}
+                    <span class="text-xs text-dark-400">—</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Radar / Bar Chart: So sánh 3 algorithms trên 4 metrics chính -->
+    <div class="bg-white rounded-xl border border-dark-200 p-5 mb-5">
+        <h3 class="font-semibold text-dark-800 text-sm mb-4">So sánh thuật toán — Precision, Recall, Hit Rate, NDCG (K={{ eval_k }})</h3>
+        <div style="height:260px;position:relative">
+            <canvas id="algoCompareChart"></canvas>
+        </div>
+    </div>
+</div>
+{% else %}
+<!-- No eval yet placeholder -->
+<div class="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-8 text-center mb-6">
+    <div class="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <i data-lucide="bar-chart-2" class="w-7 h-7 text-purple-500"></i>
+    </div>
+    <h3 class="font-semibold text-dark-800 mb-2">Chưa có kết quả đánh giá</h3>
+    <p class="text-sm text-dark-500 mb-4 max-w-md mx-auto">
+        Nhấn nút <strong>"Chạy Đánh Giá (K=8)"</strong> ở trên để tính toán Precision@8, Recall@8, NDCG@8, Coverage và Diversity cho 3 thuật toán.
+    </p>
+    <p class="text-xs text-dark-400">Yêu cầu tối thiểu {{ 4 }} interactions/user để được đưa vào đánh giá.</p>
+</div>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!--  SECTION B: ONLINE METRICS                                           -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="mb-6">
+    <div class="flex items-center gap-2 mb-4">
+        <div class="w-6 h-6 rounded-md bg-blue-100 flex items-center justify-center">
+            <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5 text-blue-600"></i>
+        </div>
+        <h2 class="font-semibold text-dark-800 text-sm uppercase tracking-wide">B — Online Metrics (Real-time từ source tracking)</h2>
+    </div>
+
+    {% if has_eval and online_metrics %}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {% set online_cards = [
+            ('ctr',             'CTR',               'Click-through Rate từ recommendation', 'mouse-pointer-click', 'blue'),
+            ('conversion_rate', 'Conversion Rate',   'Purchase / View từ recommendation',    'shopping-bag',       'emerald'),
+            ('cart_rate',       'Cart Rate',         'Add-to-cart / View từ recommendation', 'shopping-cart',      'amber'),
+            ('acceptance_rate', 'Acceptance Rate',   'Users đã mua ≥1 rec / Users click rec','check-circle',      'purple'),
+        ] %}
+        {% for key, label, desc, icon, color in online_cards %}
+        {% set val = online_metrics.get(key, 0) %}
+        <div class="bg-white rounded-xl border border-dark-200 p-4">
+            <div class="flex items-center gap-2 mb-3">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center
+                    {% if color=='blue' %}bg-blue-100 text-blue-600
+                    {% elif color=='emerald' %}bg-emerald-100 text-emerald-600
+                    {% elif color=='amber' %}bg-amber-100 text-amber-600
+                    {% else %}bg-purple-100 text-purple-600{% endif %}">
+                    <i data-lucide="{{ icon }}" class="w-4 h-4"></i>
+                </div>
+                <p class="text-xs font-semibold text-dark-600 uppercase tracking-wide">{{ label }}</p>
+            </div>
+            <p class="text-2xl font-bold text-dark-900 mb-1">{{ "%.1f"|format(val * 100) }}%</p>
+            <p class="text-xs text-dark-400">{{ desc }}</p>
+            <!-- Progress bar -->
+            <div class="mt-3 w-full bg-dark-100 rounded-full h-1.5">
+                <div class="h-1.5 rounded-full transition-all
+                    {% if color=='blue' %}bg-blue-500{% elif color=='emerald' %}bg-emerald-500{% elif color=='amber' %}bg-amber-500{% else %}bg-purple-500{% endif %}"
+                    style="width: {{ [val * 100, 100] | min | round(1) }}%"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Raw counts -->
+    <div class="mt-4 bg-white rounded-xl border border-dark-200 p-4">
+        <h4 class="text-xs font-semibold text-dark-500 uppercase tracking-wide mb-3">Số liệu chi tiết nguồn Recommendation</h4>
+        <div class="grid grid-cols-3 lg:grid-cols-6 gap-3 text-center">
+            {% set raw_cards = [
+                ('total_rec_views',     'Views từ Rec',    'blue'),
+                ('total_rec_carts',     'Carts từ Rec',    'amber'),
+                ('total_rec_purchases', 'Purchases từ Rec','emerald'),
+                ('rec_active_users',    'Users click Rec', 'purple'),
+                ('accepted_users',      'Users đã mua Rec','rose'),
+                ('total_interactions',  'Tổng interaction','dark'),
+            ] %}
+            {% for key, label, color in raw_cards %}
+            <div class="p-2 rounded-lg bg-dark-50">
+                <p class="text-lg font-bold text-dark-800">{{ online_metrics.get(key, 0) | int }}</p>
+                <p class="text-xs text-dark-400">{{ label }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% else %}
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-5 text-center">
+        <i data-lucide="info" class="w-8 h-8 text-blue-400 mx-auto mb-2"></i>
+        <p class="text-sm text-blue-700 font-medium">Online metrics chưa có dữ liệu</p>
+        <p class="text-xs text-blue-500 mt-1">Metrics sẽ tự động cập nhật sau khi user click vào sản phẩm từ trang <strong>Gợi ý AI</strong>. Chạy Đánh Giá để load kết quả mới nhất.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!--  SECTION: INTERACTION DATA (giữ nguyên từ trước)                     -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
 
     <!-- Interaction breakdown -->
@@ -125,7 +321,7 @@
             <i data-lucide="brain" class="w-4 h-4 text-purple-600"></i>
         </div>
         <div>
-            <h3 class="font-semibold text-purple-800 text-sm mb-2">Cách hệ thống AI hoạt động</h3>
+            <h3 class="font-semibold text-purple-800 text-sm mb-2">Cách hệ thống AI hoạt động & Metrics đánh giá</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-purple-700">
                 <div class="bg-white rounded-lg p-3 border border-purple-100">
                     <p class="font-semibold mb-1">Content-Based (TF-IDF)</p>
@@ -136,8 +332,8 @@
                     <p class="text-purple-600 leading-relaxed">Xây dựng User-Item matrix với điểm view=1, cart=3, purchase=5. Tính User Similarity bằng Cosine. Gợi ý sản phẩm từ user tương tự.</p>
                 </div>
                 <div class="bg-white rounded-lg p-3 border border-purple-100">
-                    <p class="font-semibold mb-1">Co-Purchase Analysis</p>
-                    <p class="text-purple-600 leading-relaxed">Tìm user đã mua sản phẩm A → phân tích họ còn mua gì → rank theo tần suất. Tạo gợi ý "Người mua cũng mua".</p>
+                    <p class="font-semibold mb-1">Metrics ý nghĩa</p>
+                    <p class="text-purple-600 leading-relaxed"><strong>Precision@8</strong>: Trong 8 gợi ý → % đúng. <strong>Recall@8</strong>: Bắt được bao nhiêu % ground truth. <strong>NDCG@8</strong>: Precision có xét thứ hạng. <strong>CTR</strong>: % click từ rec.</p>
                 </div>
             </div>
         </div>
@@ -148,6 +344,7 @@
 
 {% block extra_scripts %}
 <script>
+// ── Interaction Doughnut Chart ───────────────────────────────────────────────
 const interactionLabels = {{ interaction_stats | map(attribute=0) | list | tojson }};
 const interactionCounts = {{ interaction_stats | map(attribute=1) | list | tojson }};
 
@@ -170,13 +367,14 @@ new Chart(document.getElementById('interactionChart'), {
     }
 });
 
-const ratingLabels = {{ avg_ratings | map(attribute=0) | map(attribute='name') | list | map('truncate', 25, true, '...') | list | tojson }};
+// ── Rating Bar Chart ─────────────────────────────────────────────────────────
+const ratingLabels = {{ avg_ratings | map(attribute=0) | map(attribute='name') | list | tojson }};
 const ratingValues = {{ avg_ratings | map(attribute=1) | list | tojson }};
 
 new Chart(document.getElementById('ratingChart'), {
     type: 'bar',
     data: {
-        labels: ratingLabels,
+        labels: ratingLabels.map(n => n.length > 22 ? n.slice(0, 22) + '…' : n),
         datasets: [{
             label: 'Rating TB',
             data: ratingValues.map(v => Math.round(v * 10) / 10),
@@ -195,5 +393,47 @@ new Chart(document.getElementById('ratingChart'), {
         }
     }
 });
+
+// ── Algorithm Comparison Bar Chart ───────────────────────────────────────────
+{% if has_eval and eval_results %}
+const evalResults = {{ eval_results | tojson }};
+const compareMetrics = ['precision_at_k', 'recall_at_k', 'hit_rate', 'ndcg'];
+const compareLabels  = ['Precision@8', 'Recall@8', 'Hit Rate@8', 'NDCG@8'];
+const algoKeys  = ['content_based', 'collaborative', 'hybrid'];
+const algoNames = ['Content-based', 'Collaborative', 'Hybrid'];
+const algoColors = [
+    ['rgba(6,182,212,0.7)', 'rgba(6,182,212,1)'],    // cyan
+    ['rgba(168,85,247,0.7)', 'rgba(168,85,247,1)'],   // purple
+    ['rgba(16,185,129,0.7)', 'rgba(16,185,129,1)'],   // emerald
+];
+
+const compareDatasets = algoKeys.map((key, i) => ({
+    label: algoNames[i],
+    data: compareMetrics.map(m => evalResults[key]?.[m] ?? 0),
+    backgroundColor: algoColors[i][0],
+    borderColor: algoColors[i][1],
+    borderWidth: 2, borderRadius: 4,
+}));
+
+new Chart(document.getElementById('algoCompareChart'), {
+    type: 'bar',
+    data: { labels: compareLabels, datasets: compareDatasets },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } },
+            tooltip: {
+                callbacks: {
+                    label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)}`
+                }
+            }
+        },
+        scales: {
+            y: { min: 0, max: 1, ticks: { font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+            x: { ticks: { font: { size: 11 } } }
+        }
+    }
+});
+{% endif %}
 </script>
 {% endblock %}

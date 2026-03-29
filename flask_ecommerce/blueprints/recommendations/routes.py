@@ -79,4 +79,7 @@ def recommendations():
         popular=popular,
         hybrid_products=hybrid_products,
         hybrid_algo=hybrid_algo,
+        # Source tag: template sẽ gắn ?source=recommendation vào mọi link product
+        source_tag="recommendation",
     )
+

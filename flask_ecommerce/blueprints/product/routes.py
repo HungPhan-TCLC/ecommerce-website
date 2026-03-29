@@ -2,12 +2,15 @@
 blueprints/product/routes.py - Chi tiết sản phẩm & danh mục
 """
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, request
 from flask_login import current_user
 from models import db, Product, Category, UserInteraction
 from recommendation import recommendation_engine
 
 product_bp = Blueprint("product", __name__)
+
+# Các nguồn hợp lệ cho online metrics tracking
+VALID_SOURCES = {"recommendation", "search", "category", "homepage", "direct"}
 
 
 @product_bp.route("/category/<slug>")
@@ -21,7 +24,13 @@ def category_products(slug):
 def product_detail(product_id):
     product = Product.query.get_or_404(product_id)
 
-    # Ghi nhận lượt xem (cho recommendation)
+    # Lấy source từ query param để tracking online metrics
+    # Ví dụ: /product/5?source=recommendation
+    source = request.args.get("source", "direct")
+    if source not in VALID_SOURCES:
+        source = "direct"
+
+    # Ghi nhận lượt xem (cho recommendation + online metrics)
     if current_user.is_authenticated:
         existing = UserInteraction.query.filter_by(
             user_id=current_user.id,
@@ -33,8 +42,13 @@ def product_detail(product_id):
                 user_id=current_user.id,
                 product_id=product_id,
                 interaction_type="view",
+                source=source,
             )
             db.session.add(interaction)
+            db.session.commit()
+        elif source == "recommendation" and existing.source != "recommendation":
+            # Cập nhật source nếu lần này đến từ recommendation (ưu tiên hơn)
+            existing.source = "recommendation"
             db.session.commit()
 
     similar_products = recommendation_engine.get_similar_products(product_id, top_n=4)

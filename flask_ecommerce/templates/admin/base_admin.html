@@ -44,12 +44,12 @@
         <!-- Nav -->
         <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {% set nav_items = [
-                ('admin_dashboard',    'layout-dashboard', 'Dashboard',       'Tổng quan hệ thống'),
-                ('admin_products',     'package',          'Sản phẩm',        'Quản lý & thêm mới'),
-                ('admin_categories',   'tag',              'Danh mục',        'Phân loại sản phẩm'),
-                ('admin_orders',       'shopping-cart',    'Đơn hàng',        'Xử lý & theo dõi'),
-                ('admin_users',        'users',            'Người dùng',      'Tài khoản & quyền'),
-                ('admin_ai_stats',     'brain',            'AI & Gợi ý',      'Phân tích recommendation'),
+                ('admin.admin_dashboard',    'layout-dashboard', 'Dashboard',       'Tổng quan hệ thống'),
+                ('admin.admin_products',     'package',          'Sản phẩm',        'Quản lý & thêm mới'),
+                ('admin.admin_categories',   'tag',              'Danh mục',        'Phân loại sản phẩm'),
+                ('admin.admin_orders',       'shopping-cart',    'Đơn hàng',        'Xử lý & theo dõi'),
+                ('admin.admin_users',        'users',            'Người dùng',      'Tài khoản & quyền'),
+                ('admin.admin_ai_stats',     'brain',            'AI & Gợi ý',      'Phân tích recommendation'),
             ] %}
             {% for endpoint, icon, label, sublabel in nav_items %}
             <a href="{{ url_for(endpoint) }}"

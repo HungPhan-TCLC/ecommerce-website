@@ -79,11 +79,12 @@
                             {% endfor %}
                         </div>
                     </div>
-
+                    <!--
                     <a href="{{ url_for('recommendations.recommendations') }}" class="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition-colors">
                         <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
                         AI Gợi ý
                     </a>
+                    -->
                 </nav>
 
                 <!-- Right Actions -->
@@ -116,18 +117,19 @@
                                 <i data-lucide="user-cog" class="w-3.5 h-3.5"></i>
                                 Thông tin tài khoản
                             </a>
-                            <a href="{{ url_for('orders.order_history') }}" class="block px-4 py-2 text-sm text-dark-600 hover:bg-dark-50 hover:text-dark-900">Đơn hàng của tôi</a>
+                            {% if current_user.is_admin %}
                             <a href="{{ url_for('recommendations.recommendations') }}" class="block px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 flex items-center gap-1.5">
                                 <i data-lucide="brain" class="w-3.5 h-3.5"></i>
                                 AI Gợi ý cho tôi
                             </a>
-                            {% if current_user.is_admin %}
                             <div class="border-t border-dark-100 mt-1 pt-1">
                                 <a href="{{ url_for('admin.admin_dashboard') }}" class="block px-4 py-2 text-sm text-dark-800 font-medium hover:bg-dark-50 flex items-center gap-1.5">
                                     <i data-lucide="shield-check" class="w-3.5 h-3.5 text-primary-600"></i>
                                     Admin Panel
                                 </a>
                             </div>
+                            {% else %}
+                            <a href="{{ url_for('orders.order_history') }}" class="block px-4 py-2 text-sm text-dark-600 hover:bg-dark-50 hover:text-dark-900">Đơn hàng của tôi</a>
                             {% endif %}
                             <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">Đăng xuất</a>
                         </div>
@@ -263,8 +265,8 @@
                 <div>
                     <h4 class="text-white font-semibold text-sm uppercase tracking-wider mb-4">Liên hệ</h4>
                     <ul class="space-y-2.5 text-sm">
-                        <li class="flex items-center gap-2"><i data-lucide="map-pin" class="w-4 h-4 flex-shrink-0"></i> 123 Nguyễn Huệ, Q.1, TP.HCM</li>
-                        <li class="flex items-center gap-2"><i data-lucide="phone" class="w-4 h-4 flex-shrink-0"></i> 1900 1234 56</li>
+                        <li class="flex items-center gap-2"><i data-lucide="map-pin" class="w-4 h-4 flex-shrink-0"></i> 114 Xuân Thủy, Cầu Giấy, Hà Nội</li>
+                        <li class="flex items-center gap-2"><i data-lucide="phone" class="w-4 h-4 flex-shrink-0"></i> 033 666 9999</li>
                         <li class="flex items-center gap-2"><i data-lucide="mail" class="w-4 h-4 flex-shrink-0"></i> hungpd@luxefashion.vn</li>
                     </ul>
                 </div>
