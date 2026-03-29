@@ -1,0 +1,273 @@
+{% extends 'common/base.html' %}
+{% block title %}Đơn hàng của tôi{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ── Status Tabs ── */
+    .order-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.55rem 1rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: #64748b;
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+        transition: color 0.2s, border-color 0.2s;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .order-tab:hover { color: #1e293b; border-bottom-color: #cbd5e1; }
+    .order-tab.active { color: #db2777; border-bottom-color: #db2777; font-weight: 600; }
+    .tab-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.25rem;
+        height: 1.25rem;
+        padding: 0 0.3rem;
+        font-size: 0.65rem;
+        font-weight: 700;
+        border-radius: 9999px;
+        background: #e2e8f0;
+        color: #475569;
+    }
+    .order-tab.active .tab-badge { background: #fce7f3; color: #be185d; }
+
+    /* ── Order card ── */
+    .order-card { background: white; border: 1px solid #e2e8f0; border-radius: 1rem; overflow: hidden; transition: box-shadow 0.2s; }
+    .order-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+
+    /* ── Status pill ── */
+    .status-pill {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        font-size: 0.7rem; font-weight: 600; padding: 0.25rem 0.7rem;
+        border-radius: 9999px; letter-spacing: 0.02em;
+    }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Scroll tabs on mobile ── */
+    .tabs-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .tabs-scroll::-webkit-scrollbar { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+
+    <!-- ── Page Header ── -->
+    <div class="flex items-center gap-3 mb-6">
+        <div class="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center">
+            <i data-lucide="package" class="w-5 h-5 text-primary-600"></i>
+        </div>
+        <div>
+            <h1 class="font-display text-2xl font-bold text-dark-900">Đơn hàng của tôi</h1>
+            <p class="text-sm text-dark-400">Quản lý và theo dõi tất cả đơn hàng</p>
+        </div>
+    </div>
+
+    <!-- ── Status Tabs ── -->
+    {% set tabs = [
+        ("all",             "Tất cả",            "layers",        counts.all,             true),
+        ("pending_payment", "Chờ thanh toán",     "clock",         counts.pending_payment, true),
+        ("payment_failed",  "Thanh toán lỗi",     "alert-circle",  counts.payment_failed,  false),
+        ("confirmed",       "Chờ giao hàng",      "package",       counts.confirmed,       true),
+        ("shipped",         "Đang giao",          "truck",         counts.shipped,         false),
+        ("delivered",       "Hoàn thành",         "package-check", counts.delivered,       true),
+        ("cancelled",       "Đã hủy",             "x-circle",      counts.cancelled,       false),
+    ] %}
+
+    <div class="bg-white border border-dark-100 rounded-2xl mb-6 shadow-sm">
+        <div class="tabs-scroll">
+            <div class="flex border-b border-dark-100 px-2">
+                {% for key, label, icon, count, always_show in tabs %}
+                {% if always_show or count > 0 %}
+                <a href="{{ url_for('orders.order_history') }}?status={{ key }}"
+                   class="order-tab {% if status_filter == key %}active{% endif %}">
+                    <i data-lucide="{{ icon }}" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                    {{ label }}
+                    {% if count > 0 %}
+                    <span class="tab-badge">{{ count }}</span>
+                    {% endif %}
+                </a>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Orders List ── -->
+    {% if orders %}
+    <div class="space-y-4">
+        {% for order in orders %}
+        <div class="order-card">
+
+            <!-- Card Header -->
+            <div class="flex items-center justify-between px-5 py-3.5 bg-slate-50 border-b border-dark-100">
+                <div class="flex items-center gap-4 text-sm">
+                    <span class="font-semibold text-dark-800">Đơn #{{ order_seq[order.id] }}</span>
+                    <span class="text-dark-400 flex items-center gap-1">
+                        <i data-lucide="calendar" class="w-3 h-3"></i>
+                        {{ order.created_at.strftime('%d/%m/%Y %H:%M') }}
+                    </span>
+                    {% if order.payment_method %}
+                    <span class="hidden sm:flex items-center gap-1 text-dark-400">
+                        <i data-lucide="credit-card" class="w-3 h-3"></i>
+                        {{ order.payment_method | upper }}
+                    </span>
+                    {% endif %}
+                </div>
+
+                <!-- Status pill -->
+                {% if order.status == 'delivered' %}
+                <span class="status-pill bg-emerald-100 text-emerald-700">
+                    <span class="status-dot bg-emerald-500"></span>Đã giao
+                </span>
+                {% elif order.status == 'shipped' %}
+                <span class="status-pill bg-blue-100 text-blue-700">
+                    <span class="status-dot bg-blue-500"></span>Đang giao
+                </span>
+                {% elif order.status == 'confirmed' %}
+                <span class="status-pill bg-amber-100 text-amber-700">
+                    <span class="status-dot bg-amber-400"></span>Đã xác nhận
+                </span>
+                {% elif order.status == 'pending_payment' %}
+                <span class="status-pill bg-orange-100 text-orange-700">
+                    <span class="status-dot bg-orange-400"></span>Chờ thanh toán
+                </span>
+                {% elif order.status == 'payment_failed' %}
+                <span class="status-pill bg-red-100 text-red-700">
+                    <span class="status-dot bg-red-500"></span>Thanh toán lỗi
+                </span>
+                {% elif order.status == 'cancelled' %}
+                <span class="status-pill bg-slate-100 text-slate-500">
+                    <span class="status-dot bg-slate-400"></span>Đã hủy
+                </span>
+                {% else %}
+                <span class="status-pill bg-dark-100 text-dark-500">
+                    <span class="status-dot bg-dark-400"></span>Chờ xử lý
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- Items -->
+            <div class="p-5">
+                <div class="space-y-3">
+                    {% for item in order.items %}
+                    <div class="flex gap-3 items-center">
+                        <a href="{{ url_for('product.product_detail', product_id=item.product.id) }}"
+                           class="w-14 h-14 rounded-lg overflow-hidden bg-dark-100 flex-shrink-0 hover:opacity-80 transition-opacity">
+                            <img src="{{ item.product.image_url }}" alt="{{ item.product.name }}"
+                                 class="w-full h-full object-cover">
+                        </a>
+                        <div class="flex-1 min-w-0">
+                            <a href="{{ url_for('product.product_detail', product_id=item.product.id) }}"
+                               class="text-sm font-medium text-dark-700 hover:text-primary-600 transition-colors line-clamp-1">
+                                {{ item.product.name }}
+                            </a>
+                            <p class="text-xs text-dark-400 mt-0.5">
+                                {{ item.quantity }} × {{ item.price | format_price }}
+                            </p>
+                        </div>
+                        <p class="text-sm font-semibold text-dark-800 flex-shrink-0">
+                            {{ (item.price * item.quantity) | format_price }}
+                        </p>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Footer -->
+                <div class="mt-4 pt-4 border-t border-dark-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                    <div class="text-xs text-dark-400 flex items-center gap-1.5">
+                        <i data-lucide="map-pin" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                        <span class="truncate max-w-xs">{{ order.address }}</span>
+                    </div>
+
+                    <div class="flex items-center gap-3 sm:justify-end">
+                        <div class="text-right">
+                            <p class="text-xs text-dark-400">Tổng tiền</p>
+                            <p class="text-lg font-bold text-dark-900">{{ order.total_amount | format_price }}</p>
+                        </div>
+
+                        <!-- Action buttons -->
+                        {% if order.status in ('pending_payment', 'payment_failed') %}
+                        <div class="flex flex-col gap-1.5">
+                            <a href="{{ url_for('orders.retry_payment', order_id=order.id) }}"
+                               class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg text-white transition-colors
+                                      {% if order.status == 'payment_failed' %}bg-red-500 hover:bg-red-600{% else %}bg-orange-500 hover:bg-orange-600{% endif %}">
+                                <i data-lucide="credit-card" class="w-3.5 h-3.5"></i>
+                                Thanh toán lại
+                            </a>
+                            <form action="{{ url_for('orders.cancel_pending_order', order_id=order.id) }}" method="POST"
+                                  onsubmit="return confirm('Bạn chắc chắn muốn hủy đơn hàng này?')">
+                                <button type="submit"
+                                        class="w-full inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs font-medium border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-50 hover:text-red-500 hover:border-red-200 transition-colors">
+                                    <i data-lucide="x" class="w-3 h-3"></i>
+                                    Hủy đơn
+                                </button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <!-- Empty state -->
+    <div class="text-center py-20 bg-white border border-dark-100 rounded-2xl">
+        <div class="w-20 h-20 mx-auto mb-5 rounded-full flex items-center justify-center
+            {% if status_filter == 'pending_payment' %}bg-orange-50
+            {% elif status_filter == 'payment_failed' %}bg-red-50
+            {% elif status_filter == 'delivered' %}bg-emerald-50
+            {% elif status_filter == 'cancelled' %}bg-slate-100
+            {% else %}bg-primary-50{% endif %}">
+            {% if status_filter == 'pending_payment' %}
+            <i data-lucide="clock" class="w-9 h-9 text-orange-400"></i>
+            {% elif status_filter == 'payment_failed' %}
+            <i data-lucide="alert-circle" class="w-9 h-9 text-red-400"></i>
+            {% elif status_filter == 'shipped' %}
+            <i data-lucide="truck" class="w-9 h-9 text-blue-400"></i>
+            {% elif status_filter == 'delivered' %}
+            <i data-lucide="package-check" class="w-9 h-9 text-emerald-400"></i>
+            {% elif status_filter == 'cancelled' %}
+            <i data-lucide="x-circle" class="w-9 h-9 text-slate-400"></i>
+            {% else %}
+            <i data-lucide="package" class="w-9 h-9 text-primary-400"></i>
+            {% endif %}
+        </div>
+        <h2 class="text-lg font-semibold text-dark-700 mb-2">
+            {% if status_filter == 'all' %}Chưa có đơn hàng nào
+            {% elif status_filter == 'pending_payment' %}Không có đơn chờ thanh toán
+            {% elif status_filter == 'payment_failed' %}Không có đơn thanh toán lỗi
+            {% elif status_filter == 'confirmed' %}Không có đơn chờ giao hàng
+            {% elif status_filter == 'shipped' %}Không có đơn đang giao
+            {% elif status_filter == 'delivered' %}Chưa có đơn hoàn thành
+            {% elif status_filter == 'cancelled' %}Không có đơn đã hủy
+            {% else %}Không có đơn hàng{% endif %}
+        </h2>
+        <p class="text-dark-400 text-sm mb-6">
+            {% if status_filter == 'all' %}Hãy bắt đầu mua sắm để có đơn hàng đầu tiên!
+            {% else %}Bạn chưa có đơn hàng nào ở trạng thái này.{% endif %}
+        </p>
+        <div class="flex justify-center gap-3 flex-wrap">
+            {% if status_filter != 'all' %}
+            <a href="{{ url_for('orders.order_history') }}"
+               class="inline-flex items-center gap-2 px-5 py-2.5 border border-dark-200 text-dark-600 text-sm font-medium rounded-full hover:bg-dark-50 transition-colors">
+                Xem tất cả đơn hàng
+            </a>
+            {% endif %}
+            <a href="{{ url_for('home.index') }}"
+               class="inline-flex items-center gap-2 px-5 py-2.5 bg-dark-900 text-white text-sm font-medium rounded-full hover:bg-primary-600 transition-colors">
+                <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+                Mua sắm ngay
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

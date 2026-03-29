@@ -1,0 +1,439 @@
+{% extends 'common/base.html' %}
+{% block title %}{% if query %}Tìm kiếm: {{ query }}{% else %}Tìm kiếm sản phẩm{% endif %}{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ── Filter Sidebar ── */
+    .filter-group { border-bottom: 1px solid #e2e8f0; padding-bottom: 1.25rem; margin-bottom: 1.25rem; }
+    .filter-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .filter-heading { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+    .filter-check { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; border-radius: 0.5rem; cursor: pointer; transition: background 0.15s; }
+    .filter-check:hover { background: #f1f5f9; }
+    .filter-check input[type=checkbox] { accent-color: #db2777; width: 16px; height: 16px; border-radius: 4px; cursor: pointer; }
+    .filter-check span { font-size: 0.875rem; color: #334155; }
+    .filter-check.active { background: #fce7f3; }
+    .filter-check.active span { color: #be185d; font-weight: 500; }
+
+    /* ── Price range ── */
+    .price-inputs { display: flex; gap: 0.5rem; align-items: center; }
+    .price-input { flex: 1; min-width: 0; padding: 0.4rem 0.6rem; font-size: 0.8rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+    .price-input:focus { border-color: #f472b6; box-shadow: 0 0 0 3px #fce7f3; }
+
+    /* ── Active filter badges ── */
+    .filter-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #fce7f3; color: #be185d; border: 1px solid #fbcfe8; transition: all 0.15s; }
+    .filter-badge button { display: flex; align-items: center; opacity: 0.7; }
+    .filter-badge button:hover { opacity: 1; }
+
+    /* ── Sort select ── */
+    .sort-select { padding: 0.45rem 2rem 0.45rem 0.75rem; font-size: 0.85rem; border: 1px solid #e2e8f0; border-radius: 0.625rem; background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.6rem center; appearance: none; cursor: pointer; color: #1e293b; outline: none; transition: border-color 0.2s; }
+    .sort-select:focus { border-color: #f472b6; box-shadow: 0 0 0 3px #fce7f3; }
+
+    /* ── Product grid skeleton ── */
+    .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 0.75rem; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* ── Mobile filter drawer ── */
+    #filter-drawer { position: fixed; inset: 0; z-index: 60; display: none; }
+    #filter-drawer.open { display: block; }
+    #filter-overlay { position: absolute; inset: 0; background: rgba(15,23,42,0.5); }
+    #filter-panel { position: absolute; left: 0; top: 0; bottom: 0; width: 300px; max-width: 85vw; background: white; overflow-y: auto; padding: 1.5rem; box-shadow: 4px 0 24px rgba(0,0,0,0.15); animation: slideIn 0.25s ease; }
+    @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+
+    /* ── Collapse toggle ── */
+    .filter-body { transition: max-height 0.3s ease, opacity 0.3s ease; overflow: hidden; }
+    .filter-body.collapsed { max-height: 0 !important; opacity: 0; }
+    .toggle-icon { transition: transform 0.25s; }
+    .toggled .toggle-icon { transform: rotate(180deg); }
+
+    /* ── Result count chip ── */
+    .result-chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.875rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9999px; font-size: 0.8rem; color: #64748b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+
+    <!-- ── Page header ── -->
+    <div class="mb-6">
+        <h1 class="font-display text-2xl lg:text-3xl font-bold text-dark-900">
+            {% if query %}
+                Kết quả cho <span class="text-primary-600">"{{ query }}"</span>
+            {% else %}
+                Tất cả sản phẩm
+            {% endif %}
+        </h1>
+        <p class="text-dark-400 mt-1 text-sm">
+            {% if query %}Tìm thấy <strong class="text-dark-700">{{ products | length }}</strong> sản phẩm{% else %}Dùng filter bên trái để tìm sản phẩm phù hợp{% endif %}
+        </p>
+    </div>
+
+    <!-- ── Active filter badges ── -->
+    {% if active_filters %}
+    <div class="flex flex-wrap gap-2 mb-5" id="active-filter-badges">
+        <span class="text-sm text-dark-500 self-center">Đang lọc:</span>
+        {% for key, flt in active_filters.items() %}
+        <a href="{{ request.path }}?{% for k, v in request.args.items() %}{% if k != key %}&{{ k }}={{ v }}{% endif %}{% endfor %}"
+           class="filter-badge">
+            {{ flt.label }}
+            <button type="button" aria-label="Bỏ filter {{ flt.label }}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </a>
+        {% endfor %}
+        <a href="{{ url_for('search.search') }}{% if query %}?q={{ query }}{% endif %}"
+           class="text-sm text-dark-500 hover:text-red-500 self-center underline underline-offset-2 ml-1">Xoá tất cả</a>
+    </div>
+    {% endif %}
+
+    <div class="flex gap-8">
+
+        <!-- ══════════════════════════════════════
+             SIDEBAR FILTER (desktop)
+        ══════════════════════════════════════ -->
+        <aside class="hidden lg:block w-60 xl:w-64 flex-shrink-0">
+            <div class="sticky top-24 bg-white border border-dark-100 rounded-2xl p-5 shadow-sm">
+                <div class="flex items-center justify-between mb-5">
+                    <h2 class="font-semibold text-dark-900 text-sm flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                        Bộ lọc
+                    </h2>
+                    {% if active_filters %}
+                    <a href="{{ url_for('search.search') }}{% if query %}?q={{ query }}{% endif %}" class="text-xs text-primary-600 hover:text-primary-700 font-medium">Xoá hết</a>
+                    {% endif %}
+                </div>
+
+                <form id="filter-form" method="GET" action="{{ url_for('search.search') }}">
+                    <!-- Từ khoá ẩn -->
+                    {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+                    <!-- Sort ẩn -->
+                    <input type="hidden" name="sort" id="hidden-sort" value="{{ sort_by }}">
+
+                    <!-- ── Danh mục ── -->
+                    <div class="filter-group">
+                        <div class="filter-heading toggled" onclick="toggleGroup(this)">
+                            Danh mục
+                            <svg class="toggle-icon w-4 h-4 text-dark-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                        </div>
+                        <div class="filter-body" style="max-height:500px">
+                            <label class="filter-check {% if not category_filter %}active{% endif %}">
+                                <input type="radio" name="category" value="" {% if not category_filter %}checked{% endif %} class="filter-radio accent-pink-600" onchange="this.form.submit()">
+                                <span>Tất cả</span>
+                            </label>
+                            {% for cat in all_categories %}
+                            <label class="filter-check {% if category_filter == cat.id|string %}active{% endif %}">
+                                <input type="radio" name="category" value="{{ cat.id }}"
+                                       {% if category_filter == cat.id|string %}checked{% endif %}
+                                       class="filter-radio accent-pink-600" onchange="this.form.submit()">
+                                <span>{{ cat.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- ── Giới tính ── -->
+                    <div class="filter-group">
+                        <div class="filter-heading toggled" onclick="toggleGroup(this)">
+                            Giới tính
+                            <svg class="toggle-icon w-4 h-4 text-dark-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                        </div>
+                        <div class="filter-body" style="max-height:300px">
+                            <label class="filter-check {% if not gender_filter %}active{% endif %}">
+                                <input type="radio" name="gender" value="" {% if not gender_filter %}checked{% endif %} class="filter-radio accent-pink-600" onchange="this.form.submit()">
+                                <span>Tất cả</span>
+                            </label>
+                            {% for opt in gender_options %}
+                            <label class="filter-check {% if gender_filter == opt.value %}active{% endif %}">
+                                <input type="radio" name="gender" value="{{ opt.value }}"
+                                       {% if gender_filter == opt.value %}checked{% endif %}
+                                       class="filter-radio accent-pink-600" onchange="this.form.submit()">
+                                <span>{{ opt.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- ── Phong cách ── -->
+                    <div class="filter-group">
+                        <div class="filter-heading toggled" onclick="toggleGroup(this)">
+                            Phong cách
+                            <svg class="toggle-icon w-4 h-4 text-dark-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                        </div>
+                        <div class="filter-body" style="max-height:300px">
+                            <label class="filter-check {% if not style_filter %}active{% endif %}">
+                                <input type="radio" name="style" value="" {% if not style_filter %}checked{% endif %} class="filter-radio accent-pink-600" onchange="this.form.submit()">
+                                <span>Tất cả</span>
+                            </label>
+                            {% for opt in style_options %}
+                            <label class="filter-check {% if style_filter == opt.value %}active{% endif %}">
+                                <input type="radio" name="style" value="{{ opt.value }}"
+                                       {% if style_filter == opt.value %}checked{% endif %}
+                                       class="filter-radio accent-pink-600" onchange="this.form.submit()">
+                                <span>{{ opt.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- ── Khoảng giá ── -->
+                    <div class="filter-group">
+                        <div class="filter-heading toggled" onclick="toggleGroup(this)">
+                            Khoảng giá (₫)
+                            <svg class="toggle-icon w-4 h-4 text-dark-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                        </div>
+                        <div class="filter-body" style="max-height:200px">
+                            <div class="price-inputs mb-3">
+                                <input type="number" name="price_min" placeholder="Từ" min="0" step="10000"
+                                       class="price-input" value="{{ price_min }}">
+                                <span class="text-dark-300 text-sm">–</span>
+                                <input type="number" name="price_max" placeholder="Đến" min="0" step="10000"
+                                       class="price-input" value="{{ price_max }}">
+                            </div>
+                            <!-- Nút áp dụng giá -->
+                            <div class="flex flex-wrap gap-1.5 mb-3">
+                                {% set price_ranges = [
+                                    ("Dưới 300K", "", "300000"),
+                                    ("300K–700K", "300000", "700000"),
+                                    ("700K–1.5M", "700000", "1500000"),
+                                    ("Trên 1.5M", "1500000", ""),
+                                ] %}
+                                {% for label, pmin, pmax in price_ranges %}
+                                <button type="button"
+                                    onclick="setPriceRange('{{ pmin }}','{{ pmax }}')"
+                                    class="text-xs px-2.5 py-1 border border-dark-200 rounded-full hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50 transition-colors
+                                    {% if price_min == pmin and price_max == pmax %}border-primary-400 text-primary-600 bg-primary-50{% endif %}">
+                                    {{ label }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                            <button type="submit"
+                                class="w-full py-2 text-sm font-medium bg-dark-900 text-white rounded-lg hover:bg-primary-600 transition-colors">
+                                Áp dụng
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </aside>
+
+        <!-- ══════════════════════════════════════
+             MAIN CONTENT
+        ══════════════════════════════════════ -->
+        <div class="flex-1 min-w-0">
+
+            <!-- Toolbar: Mobile filter btn + Sort + Count -->
+            <div class="flex items-center justify-between gap-3 mb-5 flex-wrap">
+                <div class="flex items-center gap-3">
+                    <!-- Mobile: open filter drawer -->
+                    <button id="open-filter-btn"
+                            class="lg:hidden inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-dark-200 rounded-full hover:border-primary-400 hover:text-primary-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                        Bộ lọc
+                        {% if active_filters %}
+                        <span class="ml-0.5 w-5 h-5 bg-primary-600 text-white text-xs rounded-full flex items-center justify-center font-bold">{{ active_filters | length }}</span>
+                        {% endif %}
+                    </button>
+                    <span class="result-chip">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                        <strong class="text-dark-700">{{ products | length }}</strong> sản phẩm
+                    </span>
+                </div>
+
+                <!-- Sort -->
+                <div class="flex items-center gap-2">
+                    <label class="text-sm text-dark-500 hidden sm:block">Sắp xếp:</label>
+                    <select class="sort-select" id="sort-select" onchange="applySort(this.value)">
+                        <option value="relevant"  {% if sort_by == 'relevant'  %}selected{% endif %}>Phù hợp nhất</option>
+                        <option value="newest"    {% if sort_by == 'newest'    %}selected{% endif %}>Mới nhất</option>
+                        <option value="price_asc" {% if sort_by == 'price_asc' %}selected{% endif %}>Giá tăng dần</option>
+                        <option value="price_desc"{% if sort_by == 'price_desc'%}selected{% endif %}>Giá giảm dần</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Product grid -->
+            {% if products %}
+            <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-5" id="product-grid">
+                {% for product in products %}
+                {% include 'common/_product_card.html' %}
+                {% endfor %}
+            </div>
+            {% else %}
+
+            <!-- Empty state -->
+            <div class="flex flex-col items-center justify-center py-24 text-center">
+                <div class="w-20 h-20 rounded-full bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center mb-5 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#db2777" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6M11 8v6" opacity=".4"/></svg>
+                </div>
+                <h2 class="text-xl font-bold text-dark-800 mb-2">Không tìm thấy sản phẩm</h2>
+                <p class="text-dark-400 text-sm max-w-xs mb-6">
+                    {% if active_filters %}
+                    Hãy thử bỏ bớt filter hoặc thay đổi từ khoá tìm kiếm.
+                    {% else %}
+                    Thử tìm kiếm với từ khoá khác hoặc khám phá danh mục sản phẩm.
+                    {% endif %}
+                </p>
+                <div class="flex flex-wrap gap-3 justify-center">
+                    {% if active_filters %}
+                    <a href="{{ url_for('search.search') }}{% if query %}?q={{ query }}{% endif %}"
+                       class="inline-flex items-center gap-2 px-5 py-2.5 border border-primary-300 text-primary-600 text-sm font-medium rounded-full hover:bg-primary-50 transition-colors">
+                        Xoá filter
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('home.index') }}"
+                       class="inline-flex items-center gap-2 px-5 py-2.5 bg-dark-900 text-white text-sm font-medium rounded-full hover:bg-primary-600 transition-colors">
+                        Về trang chủ
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MOBILE FILTER DRAWER
+══════════════════════════════════════ -->
+<div id="filter-drawer" role="dialog" aria-label="Bộ lọc sản phẩm">
+    <div id="filter-overlay"></div>
+    <div id="filter-panel">
+        <div class="flex items-center justify-between mb-5">
+            <h2 class="font-semibold text-dark-900 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                Bộ lọc
+            </h2>
+            <button id="close-filter-btn" class="p-1.5 rounded-lg hover:bg-dark-100 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <!-- Clone of sidebar filter form for mobile -->
+        <form id="mobile-filter-form" method="GET" action="{{ url_for('search.search') }}">
+            {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+            <input type="hidden" name="sort" value="{{ sort_by }}">
+
+            <!-- Danh mục -->
+            <div class="filter-group">
+                <p class="filter-heading" style="cursor:default">Danh mục</p>
+                <label class="filter-check {% if not category_filter %}active{% endif %}">
+                    <input type="radio" name="category" value="" {% if not category_filter %}checked{% endif %} class="filter-radio accent-pink-600">
+                    <span>Tất cả</span>
+                </label>
+                {% for cat in all_categories %}
+                <label class="filter-check {% if category_filter == cat.id|string %}active{% endif %}">
+                    <input type="radio" name="category" value="{{ cat.id }}" {% if category_filter == cat.id|string %}checked{% endif %} class="filter-radio accent-pink-600">
+                    <span>{{ cat.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+
+            <!-- Giới tính -->
+            <div class="filter-group">
+                <p class="filter-heading" style="cursor:default">Giới tính</p>
+                <label class="filter-check {% if not gender_filter %}active{% endif %}">
+                    <input type="radio" name="gender" value="" {% if not gender_filter %}checked{% endif %} class="filter-radio accent-pink-600">
+                    <span>Tất cả</span>
+                </label>
+                {% for opt in gender_options %}
+                <label class="filter-check {% if gender_filter == opt.value %}active{% endif %}">
+                    <input type="radio" name="gender" value="{{ opt.value }}" {% if gender_filter == opt.value %}checked{% endif %} class="filter-radio accent-pink-600">
+                    <span>{{ opt.label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+
+            <!-- Phong cách -->
+            <div class="filter-group">
+                <p class="filter-heading" style="cursor:default">Phong cách</p>
+                <label class="filter-check {% if not style_filter %}active{% endif %}">
+                    <input type="radio" name="style" value="" {% if not style_filter %}checked{% endif %} class="filter-radio accent-pink-600">
+                    <span>Tất cả</span>
+                </label>
+                {% for opt in style_options %}
+                <label class="filter-check {% if style_filter == opt.value %}active{% endif %}">
+                    <input type="radio" name="style" value="{{ opt.value }}" {% if style_filter == opt.value %}checked{% endif %} class="filter-radio accent-pink-600">
+                    <span>{{ opt.label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+
+            <!-- Khoảng giá -->
+            <div class="filter-group">
+                <p class="filter-heading" style="cursor:default">Khoảng giá (₫)</p>
+                <div class="price-inputs mb-3">
+                    <input type="number" name="price_min" placeholder="Từ" min="0" step="10000" class="price-input" value="{{ price_min }}">
+                    <span class="text-dark-300 text-sm">–</span>
+                    <input type="number" name="price_max" placeholder="Đến" min="0" step="10000" class="price-input" value="{{ price_max }}">
+                </div>
+                <div class="flex flex-wrap gap-1.5 mb-3">
+                    {% for label, pmin, pmax in [("Dưới 300K","","300000"),("300K–700K","300000","700000"),("700K–1.5M","700000","1500000"),("Trên 1.5M","1500000","")] %}
+                    <button type="button" onclick="setMobilePriceRange('{{ pmin }}','{{ pmax }}')"
+                        class="text-xs px-2.5 py-1 border border-dark-200 rounded-full hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50 transition-colors">{{ label }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <button type="submit" class="w-full py-3 text-sm font-semibold bg-dark-900 text-white rounded-xl hover:bg-primary-600 transition-colors mt-2">
+                Xem kết quả ({{ products | length }})
+            </button>
+            {% if active_filters %}
+            <a href="{{ url_for('search.search') }}{% if query %}?q={{ query }}{% endif %}"
+               class="block text-center mt-3 text-sm text-dark-400 hover:text-red-500 transition-colors">Xoá tất cả filter</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ── Collapse/Expand filter groups ──
+function toggleGroup(heading) {
+    heading.classList.toggle('toggled');
+    const body = heading.nextElementSibling;
+    body.classList.toggle('collapsed');
+}
+
+// ── Apply sort: update hidden input then submit form ──
+function applySort(value) {
+    const form = document.getElementById('filter-form');
+    if (form) {
+        document.getElementById('hidden-sort').value = value;
+        form.submit();
+    } else {
+        // fallback: reload URL
+        const url = new URL(window.location.href);
+        url.searchParams.set('sort', value);
+        window.location.href = url.toString();
+    }
+}
+
+// ── Quick price range buttons (desktop) ──
+function setPriceRange(pmin, pmax) {
+    const form = document.getElementById('filter-form');
+    const inputs = form.querySelectorAll('input[name="price_min"], input[name="price_max"]');
+    inputs[0].value = pmin;
+    inputs[1].value = pmax;
+    form.submit();
+}
+
+// ── Quick price range (mobile drawer) ──
+function setMobilePriceRange(pmin, pmax) {
+    const form = document.getElementById('mobile-filter-form');
+    const inputs = form.querySelectorAll('input[name="price_min"], input[name="price_max"]');
+    inputs[0].value = pmin;
+    inputs[1].value = pmax;
+}
+
+// ── Mobile drawer ──
+const drawer   = document.getElementById('filter-drawer');
+const overlay  = document.getElementById('filter-overlay');
+const openBtn  = document.getElementById('open-filter-btn');
+const closeBtn = document.getElementById('close-filter-btn');
+
+if (openBtn) openBtn.addEventListener('click', () => { drawer.classList.add('open'); document.body.style.overflow = 'hidden'; });
+function closeDrawer() { drawer.classList.remove('open'); document.body.style.overflow = ''; }
+if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+if (overlay)  overlay.addEventListener('click',  closeDrawer);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+</script>
+{% endblock %}

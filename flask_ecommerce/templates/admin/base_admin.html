@@ -30,7 +30,7 @@
     <aside class="w-64 bg-dark-900 text-white flex flex-col fixed h-full z-30 transition-transform duration-300" id="admin-sidebar">
         <!-- Logo -->
         <div class="px-6 py-5 border-b border-dark-700">
-            <a href="{{ url_for('admin_dashboard') }}" class="flex items-center gap-2">
+            <a href="{{ url_for('admin.admin_dashboard') }}" class="flex items-center gap-2">
                 <div class="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
                     <i data-lucide="shield-check" class="w-4 h-4 text-white"></i>
                 </div>
@@ -66,11 +66,11 @@
 
         <!-- Bottom links -->
         <div class="px-3 py-4 border-t border-dark-700 space-y-1">
-            <a href="{{ url_for('index') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-dark-400 hover:bg-dark-800 hover:text-white transition-all text-sm">
+            <a href="{{ url_for('home.index') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-dark-400 hover:bg-dark-800 hover:text-white transition-all text-sm">
                 <i data-lucide="store" class="w-4 h-4"></i>
                 Xem cửa hàng
             </a>
-            <a href="{{ url_for('logout') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-dark-400 hover:bg-red-900/50 hover:text-red-300 transition-all text-sm">
+            <a href="{{ url_for('auth.logout') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-dark-400 hover:bg-red-900/50 hover:text-red-300 transition-all text-sm">
                 <i data-lucide="log-out" class="w-4 h-4"></i>
                 Đăng xuất
             </a>

@@ -1,0 +1,251 @@
+{% extends 'common/base.html' %}
+{% block title %}{{ product.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+
+    <!-- Breadcrumb -->
+    <nav class="flex items-center gap-2 text-sm text-dark-400 mb-6 lg:mb-8">
+        <a href="{{ url_for('home.index') }}" class="hover:text-dark-700 transition-colors">Trang chủ</a>
+        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+        <a href="{{ url_for('product.category_products', slug=product.category.slug) }}" class="hover:text-dark-700 transition-colors">{{ product.category.name }}</a>
+        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+        <span class="text-dark-600 truncate max-w-[200px]">{{ product.name }}</span>
+    </nav>
+
+    <!-- Product Detail -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
+        <!-- Product Image -->
+        <div class="relative">
+            <div class="aspect-[3/4] rounded-2xl overflow-hidden bg-dark-100 sticky top-24">
+                <img src="{{ product.image_url }}" alt="{{ product.name }}"
+                     class="w-full h-full object-cover" id="product-main-image">
+                
+                {% if product.original_price and product.original_price > product.price %}
+                <span class="absolute top-4 left-4 bg-red-500 text-white text-sm font-bold px-4 py-1.5 rounded-full">
+                    -{{ (product.price, product.original_price) | discount_percent }}%
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Product Info -->
+        <div class="flex flex-col">
+            <!-- Category & Tags -->
+            <div class="flex items-center gap-2 mb-3">
+                <span class="text-xs font-medium text-primary-600 bg-primary-50 px-3 py-1 rounded-full">{{ product.category.name }}</span>
+                <span class="text-xs text-dark-400">•</span>
+                <span class="text-xs text-dark-400 capitalize">{{ product.gender }}</span>
+                {% if product.style %}
+                <span class="text-xs text-dark-400">•</span>
+                <span class="text-xs text-dark-400 capitalize">{{ product.style }}</span>
+                {% endif %}
+            </div>
+
+            <!-- Name -->
+            <h1 class="font-display text-2xl lg:text-3xl font-bold text-dark-900 leading-tight mb-4">
+                {{ product.name }}
+            </h1>
+
+            <!-- Price -->
+            <div class="flex items-baseline gap-3 mb-6">
+                <span class="text-3xl font-bold text-dark-900">{{ product.price | format_price }}</span>
+                {% if product.original_price and product.original_price > product.price %}
+                <span class="text-lg text-dark-400 line-through">{{ product.original_price | format_price }}</span>
+                <span class="text-sm font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded">
+                    Tiết kiệm {{ (product.original_price - product.price) | format_price }}
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- Description -->
+            <div class="prose prose-sm text-dark-600 mb-6 leading-relaxed">
+                <p>{{ product.description }}</p>
+            </div>
+
+            <!-- Product Details -->
+            <div class="grid grid-cols-2 gap-4 py-6 border-y border-dark-100 mb-6">
+                {% if product.material %}
+                <div>
+                    <p class="text-xs text-dark-400 mb-1">Chất liệu</p>
+                    <p class="text-sm font-medium text-dark-700">{{ product.material }}</p>
+                </div>
+                {% endif %}
+                {% if product.style %}
+                <div>
+                    <p class="text-xs text-dark-400 mb-1">Phong cách</p>
+                    <p class="text-sm font-medium text-dark-700 capitalize">{{ product.style }}</p>
+                </div>
+                {% endif %}
+                <div>
+                    <p class="text-xs text-dark-400 mb-1">Giới tính</p>
+                    <p class="text-sm font-medium text-dark-700">
+                        {% if product.gender == 'nam' %}Nam
+                        {% elif product.gender == 'nu' %}Nữ
+                        {% else %}Unisex{% endif %}
+                    </p>
+                </div>
+                <div>
+                    <p class="text-xs text-dark-400 mb-1">Tình trạng</p>
+                    <p class="text-sm font-medium {% if product.stock > 0 %}text-emerald-600{% else %}text-red-500{% endif %}">
+                        {% if product.stock > 0 %}Còn hàng ({{ product.stock }}){% else %}Hết hàng{% endif %}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Add to Cart -->
+            {% if current_user.is_authenticated %}
+            <form action="{{ url_for('cart.add_to_cart', product_id=product.id) }}" method="POST" class="space-y-4">
+                <!-- Quantity -->
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-medium text-dark-600">Số lượng:</label>
+                    <div class="flex items-center border border-dark-200 rounded-lg overflow-hidden">
+                        <button type="button" onclick="changeQty(-1)" class="w-10 h-10 flex items-center justify-center text-dark-500 hover:bg-dark-50 transition-colors">
+                            <i data-lucide="minus" class="w-4 h-4"></i>
+                        </button>
+                        <input type="number" name="quantity" value="1" min="1" max="{{ product.stock }}" id="qty-input"
+                               class="w-14 h-10 text-center text-sm font-medium border-x border-dark-200 focus:outline-none">
+                        <button type="button" onclick="changeQty(1)" class="w-10 h-10 flex items-center justify-center text-dark-500 hover:bg-dark-50 transition-colors">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div class="flex gap-3">
+                    <button type="submit" class="flex-1 py-3.5 bg-dark-900 text-white font-semibold rounded-xl hover:bg-primary-600 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-dark-900/10 hover:shadow-primary-600/25">
+                        <i data-lucide="shopping-bag" class="w-5 h-5"></i>
+                        Thêm vào giỏ hàng
+                    </button>
+                </div>
+            </form>
+            {% else %}
+            <a href="{{ url_for('auth.login') }}" class="block w-full py-3.5 bg-dark-900 text-white font-semibold rounded-xl hover:bg-primary-600 transition-all text-center">
+                Đăng nhập để mua hàng
+            </a>
+            {% endif %}
+
+            <!-- Tags -->
+            {% if product.tags %}
+            <div class="mt-6 pt-6 border-t border-dark-100">
+                <p class="text-xs text-dark-400 mb-2">Tags:</p>
+                <div class="flex flex-wrap gap-2">
+                    {% for tag in product.tags.split(',') %}
+                    <span class="text-xs bg-dark-100 text-dark-500 px-2.5 py-1 rounded-full">{{ tag.strip() }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Rating Section (AI Feedback) -->
+            {% if current_user.is_authenticated %}
+            <div class="mt-6 pt-6 border-t border-dark-100">
+                <div class="flex items-center gap-2 mb-3">
+                    <i data-lucide="brain" class="w-4 h-4 text-purple-500"></i>
+                    <p class="text-sm font-semibold text-dark-700">Đánh giá để AI hiểu bạn hơn</p>
+                </div>
+                <p class="text-xs text-dark-400 mb-3">Đánh giá giúp hệ thống AI gợi ý sản phẩm chính xác hơn cho bạn</p>
+                <div class="flex items-center gap-2" id="rating-container" data-product-id="{{ product.id }}">
+                    {% for i in range(1, 6) %}
+                    <button onclick="rateProduct({{ product.id }}, {{ i }})" class="rating-star p-1 transition-all hover:scale-125" data-star="{{ i }}">
+                        <i data-lucide="star" class="w-6 h-6 text-dark-200 hover:text-amber-400 transition-colors"></i>
+                    </button>
+                    {% endfor %}
+                    <span id="rating-text" class="text-sm text-dark-400 ml-2"></span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ==================== SẢN PHẨM TƯƠNG TỰ (Content-based) ==================== -->
+    {% if similar_products %}
+    <section class="mt-16 lg:mt-24 pt-8 border-t border-dark-100">
+        <div class="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl p-4 mb-6 border border-cyan-100">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-lg bg-cyan-100 flex items-center justify-center">
+                    <i data-lucide="cpu" class="w-5 h-5 text-cyan-600"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="font-display text-lg lg:text-xl font-bold text-dark-900">Sản phẩm tương tự</h2>
+                        <span class="text-xs bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full font-semibold">Content-based AI</span>
+                    </div>
+                    <p class="text-xs text-dark-400 mt-0.5">Thuật toán TF-IDF phân tích tags, mô tả, chất liệu, phong cách → Cosine Similarity tìm sản phẩm gần nhất</p>
+                </div>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+            {% for product in similar_products %}
+            {% include 'common/_product_card.html' %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- ==================== NGƯỜI MUA CŨNG MUA (Co-purchase) ==================== -->
+    {% if also_bought %}
+    <section class="mt-12 lg:mt-16 pt-8 border-t border-dark-100">
+        <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-4 mb-6 border border-amber-100">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <i data-lucide="users" class="w-5 h-5 text-amber-600"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="font-display text-lg lg:text-xl font-bold text-dark-900">Người mua cũng mua</h2>
+                        <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">Collaborative AI</span>
+                    </div>
+                    <p class="text-xs text-dark-400 mt-0.5">Phân tích lịch sử đơn hàng → Tìm sản phẩm thường được mua cùng dựa trên tần suất mua chung</p>
+                </div>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+            {% for product in also_bought %}
+            {% include 'common/_product_card.html' %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function changeQty(delta) {
+    const input = document.getElementById('qty-input');
+    let val = parseInt(input.value) + delta;
+    const max = parseInt(input.max) || 99;
+    if (val < 1) val = 1;
+    if (val > max) val = max;
+    input.value = val;
+}
+
+function rateProduct(productId, rating) {
+    fetch(`/api/rate/${productId}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify({rating: rating})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            // Highlight stars
+            document.querySelectorAll('#rating-container .rating-star').forEach((btn, idx) => {
+                const icon = btn.querySelector('[data-lucide]');
+                if (idx < rating) {
+                    icon.classList.remove('text-dark-200');
+                    icon.classList.add('text-amber-400', 'fill-amber-400');
+                } else {
+                    icon.classList.remove('text-amber-400', 'fill-amber-400');
+                    icon.classList.add('text-dark-200');
+                }
+            });
+            document.getElementById('rating-text').textContent = `${rating}/5 - Cảm ơn bạn! AI sẽ gợi ý chính xác hơn.`;
+            document.getElementById('rating-text').classList.add('text-emerald-600');
+            lucide.createIcons();
+        }
+    });
+}
+</script>
+{% endblock %}

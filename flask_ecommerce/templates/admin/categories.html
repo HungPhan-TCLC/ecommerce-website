@@ -1,4 +1,4 @@
-{% extends "admin/base_admin.html" %}
+{% extends 'admin/base_admin.html' %}
 {% block title %}Quản lý danh mục{% endblock %}
 {% block page_title %}Danh mục{% endblock %}
 {% block page_subtitle %}Phân loại sản phẩm{% endblock %}
@@ -29,12 +29,12 @@
                         {% endif %}
                     </div>
                     <div class="flex items-center gap-2 flex-shrink-0">
-                        <a href="{{ url_for('category_products', slug=cat.slug) }}" target="_blank"
+                        <a href="{{ url_for('product.category_products', slug=cat.slug) }}" target="_blank"
                            class="p-1.5 text-dark-400 hover:text-dark-700 hover:bg-dark-100 rounded transition-colors" title="Xem trên shop">
                             <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
                         </a>
                         {% if cat.products | length == 0 %}
-                        <form method="POST" action="{{ url_for('admin_category_delete', cat_id=cat.id) }}"
+                        <form method="POST" action="{{ url_for('admin.admin_category_delete', cat_id=cat.id) }}"
                               onsubmit="return confirm('Xóa danh mục \'{{ cat.name }}\'?')">
                             <button type="submit" class="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title="Xóa">
                                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
@@ -58,7 +58,7 @@
     <div>
         <div class="bg-white rounded-xl border border-dark-200 p-5">
             <h3 class="font-semibold text-dark-800 text-sm mb-4">Thêm danh mục mới</h3>
-            <form method="POST" action="{{ url_for('admin_category_create') }}" class="space-y-4">
+            <form method="POST" action="{{ url_for('admin.admin_category_create') }}" class="space-y-4">
                 <div>
                     <label class="block text-xs font-medium text-dark-600 mb-1.5">Tên danh mục <span class="text-red-500">*</span></label>
                     <input type="text" name="name" required placeholder="VD: Áo nam"

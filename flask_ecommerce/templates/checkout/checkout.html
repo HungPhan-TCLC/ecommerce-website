@@ -1,0 +1,138 @@
+{% extends 'common/base.html' %}
+{% block title %}Thanh toán{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-8">
+        <i data-lucide="credit-card" class="w-6 h-6 text-dark-400"></i>
+        <h1 class="font-display text-2xl lg:text-3xl font-bold text-dark-900">Thanh toán</h1>
+    </div>
+
+    <form method="POST" action="{{ url_for('checkout.checkout') }}">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <!-- Shipping Info Form -->
+            <div class="lg:col-span-2">
+                <div class="bg-white border border-dark-100 rounded-2xl p-6 lg:p-8">
+                    <h3 class="font-semibold text-dark-800 text-lg mb-6 flex items-center gap-2">
+                        <i data-lucide="truck" class="w-5 h-5 text-primary-500"></i>
+                        Thông tin giao hàng
+                    </h3>
+
+                    <div class="space-y-5">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <div>
+                                <label for="full_name" class="block text-sm font-medium text-dark-600 mb-1.5">Họ và tên *</label>
+                                <input type="text" name="full_name" id="full_name" required
+                                       value="{{ current_user.full_name or '' }}"
+                                       class="w-full px-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                                       placeholder="Nguyễn Văn A">
+                            </div>
+                            <div>
+                                <label for="phone" class="block text-sm font-medium text-dark-600 mb-1.5">Số điện thoại *</label>
+                                <input type="tel" name="phone" id="phone" required
+                                       class="w-full px-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                                       placeholder="0901234567">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="address" class="block text-sm font-medium text-dark-600 mb-1.5">Địa chỉ giao hàng *</label>
+                            <textarea name="address" id="address" rows="3" required
+                                      class="w-full px-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all resize-none"
+                                      placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"></textarea>
+                        </div>
+
+                        <div>
+                            <label for="note" class="block text-sm font-medium text-dark-600 mb-1.5">Ghi chú</label>
+                            <textarea name="note" id="note" rows="2"
+                                      class="w-full px-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all resize-none"
+                                      placeholder="Ví dụ: Giao giờ hành chính, gọi trước khi giao..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Payment Method (Mock) -->
+                    <div class="mt-8 pt-6 border-t border-dark-100">
+                        <h3 class="font-semibold text-dark-800 text-lg mb-4 flex items-center gap-2">
+                            <i data-lucide="wallet" class="w-5 h-5 text-primary-500"></i>
+                            Phương thức thanh toán
+                        </h3>
+                        <div class="space-y-3">
+                            <label class="flex items-center gap-3 p-4 border-2 border-primary-400 bg-primary-50 rounded-xl cursor-pointer">
+                                <input type="radio" name="payment" value="cod" checked class="w-4 h-4 text-primary-600">
+                                <div>
+                                    <p class="text-sm font-medium text-dark-800">Thanh toán khi nhận hàng (COD)</p>
+                                    <p class="text-xs text-dark-400">Kiểm tra hàng trước khi thanh toán</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-3 p-4 border border-dark-200 rounded-xl cursor-pointer opacity-60">
+                                <input type="radio" name="payment" value="bank" disabled class="w-4 h-4">
+                                <div>
+                                    <p class="text-sm font-medium text-dark-800">Chuyển khoản ngân hàng</p>
+                                    <p class="text-xs text-dark-400">Sắp ra mắt</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Order Summary -->
+            <div class="lg:col-span-1">
+                <div class="bg-dark-50 rounded-2xl p-6 sticky top-24">
+                    <h3 class="font-semibold text-dark-800 text-lg mb-4">Đơn hàng của bạn</h3>
+
+                    <!-- Items -->
+                    <div class="space-y-3 max-h-72 overflow-y-auto mb-4">
+                        {% for item in cart_items %}
+                        <div class="flex gap-3">
+                            <div class="w-14 h-18 rounded-lg overflow-hidden bg-dark-200 flex-shrink-0">
+                                <img src="{{ item.product.image_url }}" alt="" class="w-full h-full object-cover">
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-dark-700 truncate">{{ item.product.name }}</p>
+                                <p class="text-xs text-dark-400">SL: {{ item.quantity }}</p>
+                                <p class="text-sm font-semibold text-dark-800">{{ (item.product.price * item.quantity) | format_price }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="space-y-2 text-sm border-t border-dark-200 pt-4">
+                        <div class="flex justify-between text-dark-500">
+                            <span>Tạm tính</span>
+                            <span>{{ total | format_price }}</span>
+                        </div>
+                        <div class="flex justify-between text-dark-500">
+                            <span>Vận chuyển</span>
+                            <span class="{% if total >= 500000 %}text-emerald-600{% endif %}">
+                                {% if total >= 500000 %}Miễn phí{% else %}30.000₫{% endif %}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 pt-3 border-t border-dark-200">
+                        <div class="flex justify-between items-baseline">
+                            <span class="font-semibold text-dark-800">Tổng cộng</span>
+                            <span class="text-xl font-bold text-primary-600">
+                                {% if total >= 500000 %}{{ total | format_price }}{% else %}{{ (total + 30000) | format_price }}{% endif %}
+                            </span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="mt-6 w-full py-3.5 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-all shadow-lg shadow-primary-600/25 flex items-center justify-center gap-2">
+                        <i data-lucide="check-circle" class="w-5 h-5"></i>
+                        Đặt hàng
+                    </button>
+
+                    <a href="{{ url_for('cart.cart') }}" class="mt-3 block text-center text-sm text-dark-500 hover:text-primary-600 transition-colors">
+                        ← Quay lại giỏ hàng
+                    </a>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

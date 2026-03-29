@@ -1,4 +1,4 @@
-{% extends "admin/base_admin.html" %}
+{% extends 'admin/base_admin.html' %}
 {% block title %}Quản lý sản phẩm{% endblock %}
 {% block page_title %}Sản phẩm{% endblock %}
 {% block page_subtitle %}{{ products.total }} sản phẩm trong hệ thống{% endblock %}
@@ -21,10 +21,10 @@
         </select>
         <button type="submit" class="px-4 py-2 text-sm bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors">Lọc</button>
         {% if search or category_filter %}
-        <a href="{{ url_for('admin_products') }}" class="px-3 py-2 text-sm text-dark-500 border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">Xóa lọc</a>
+        <a href="{{ url_for('admin.admin_products') }}" class="px-3 py-2 text-sm text-dark-500 border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">Xóa lọc</a>
         {% endif %}
     </form>
-    <a href="{{ url_for('admin_product_create') }}"
+    <a href="{{ url_for('admin.admin_product_create') }}"
        class="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors flex-shrink-0">
         <i data-lucide="plus" class="w-4 h-4"></i>
         Thêm sản phẩm
@@ -87,15 +87,15 @@
                     </td>
                     <td class="px-5 py-3 text-right">
                         <div class="flex items-center justify-end gap-2">
-                            <a href="{{ url_for('product_detail', product_id=product.id) }}" target="_blank"
+                            <a href="{{ url_for('product.product_detail', product_id=product.id) }}" target="_blank"
                                class="p-1.5 text-dark-400 hover:text-dark-700 hover:bg-dark-100 rounded transition-colors" title="Xem trên shop">
                                 <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
                             </a>
-                            <a href="{{ url_for('admin_product_edit', product_id=product.id) }}"
+                            <a href="{{ url_for('admin.admin_product_edit', product_id=product.id) }}"
                                class="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors" title="Chỉnh sửa">
                                 <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                             </a>
-                            <form method="POST" action="{{ url_for('admin_product_delete', product_id=product.id) }}"
+                            <form method="POST" action="{{ url_for('admin.admin_product_delete', product_id=product.id) }}"
                                   onsubmit="return confirm('Xóa sản phẩm \'{{ product.name }}\'?\nHành động này không thể hoàn tác.')">
                                 <button type="submit" class="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title="Xóa">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
@@ -124,12 +124,12 @@
         </p>
         <div class="flex gap-1">
             {% if products.has_prev %}
-            <a href="{{ url_for('admin_products', page=products.prev_num, search=search, category=category_filter) }}"
+            <a href="{{ url_for('admin.admin_products', page=products.prev_num, search=search, category=category_filter) }}"
                class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">Trước</a>
             {% endif %}
             {% for p in products.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                 {% if p %}
-                <a href="{{ url_for('admin_products', page=p, search=search, category=category_filter) }}"
+                <a href="{{ url_for('admin.admin_products', page=p, search=search, category=category_filter) }}"
                    class="px-3 py-1.5 text-xs border rounded-lg transition-colors
                           {% if p == products.page %}bg-primary-600 text-white border-primary-600{% else %}border-dark-200 hover:bg-dark-50{% endif %}">{{ p }}</a>
                 {% else %}
@@ -137,7 +137,7 @@
                 {% endif %}
             {% endfor %}
             {% if products.has_next %}
-            <a href="{{ url_for('admin_products', page=products.next_num, search=search, category=category_filter) }}"
+            <a href="{{ url_for('admin.admin_products', page=products.next_num, search=search, category=category_filter) }}"
                class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">Sau</a>
             {% endif %}
         </div>
