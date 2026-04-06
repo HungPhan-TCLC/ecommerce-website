@@ -1,0 +1,131 @@
+{% extends 'common/base.html' %}
+{% block title %}Giỏ hàng{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-8">
+        <i data-lucide="shopping-bag" class="w-6 h-6 text-dark-400"></i>
+        <h1 class="font-display text-2xl lg:text-3xl font-bold text-dark-900">Giỏ hàng</h1>
+        {% if cart_items %}
+        <span class="text-sm text-dark-400">({{ cart_items | length }} sản phẩm)</span>
+        {% endif %}
+    </div>
+
+    {% if cart_items %}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Cart Items -->
+        <div class="lg:col-span-2 space-y-4">
+            {% for item in cart_items %}
+            <div class="flex gap-4 p-4 bg-white border border-dark-100 rounded-xl hover:shadow-md transition-shadow">
+                <!-- Product Image -->
+                <a href="{{ url_for('product.product_detail', product_id=item.product.id) }}" class="flex-shrink-0">
+                    <div class="w-24 h-32 sm:w-28 sm:h-36 rounded-lg overflow-hidden bg-dark-100">
+                        <img src="{{ item.product.image_url }}" alt="{{ item.product.name }}" class="w-full h-full object-cover">
+                    </div>
+                </a>
+
+                <!-- Product Info -->
+                <div class="flex-1 flex flex-col justify-between">
+                    <div>
+                        <a href="{{ url_for('product.product_detail', product_id=item.product.id) }}" class="text-sm font-medium text-dark-800 hover:text-primary-600 transition-colors line-clamp-2">
+                            {{ item.product.name }}
+                        </a>
+                        <p class="text-xs text-dark-400 mt-1">{{ item.product.category.name }} • {{ item.product.material or '' }}</p>
+                    </div>
+
+                    <div class="flex items-end justify-between mt-3">
+                        <!-- Quantity -->
+                        <form action="{{ url_for('cart.update_cart', item_id=item.id) }}" method="POST" class="flex items-center">
+                            <div class="flex items-center border border-dark-200 rounded-lg overflow-hidden">
+                                <button type="submit" name="quantity" value="{{ item.quantity - 1 }}" class="w-8 h-8 flex items-center justify-center text-dark-400 hover:bg-dark-50 text-xs">−</button>
+                                <span class="w-10 h-8 flex items-center justify-center text-sm font-medium border-x border-dark-200">{{ item.quantity }}</span>
+                                <button type="submit" name="quantity" value="{{ item.quantity + 1 }}" class="w-8 h-8 flex items-center justify-center text-dark-400 hover:bg-dark-50 text-xs">+</button>
+                            </div>
+                        </form>
+
+                        <!-- Price & Remove -->
+                        <div class="text-right">
+                            <p class="text-base font-bold text-dark-900">{{ (item.product.price * item.quantity) | format_price }}</p>
+                            {% if item.quantity > 1 %}
+                            <p class="text-xs text-dark-400">{{ item.product.price | format_price }} x {{ item.quantity }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Remove Button -->
+                <form action="{{ url_for('cart.remove_from_cart', item_id=item.id) }}" method="POST" class="flex-shrink-0">
+                    <button type="submit" class="p-1.5 text-dark-300 hover:text-red-500 transition-colors" title="Xóa">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Order Summary -->
+        <div class="lg:col-span-1">
+            <div class="bg-dark-50 rounded-2xl p-6 sticky top-24">
+                <h3 class="font-semibold text-dark-800 text-lg mb-4">Tóm tắt đơn hàng</h3>
+
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between text-dark-500">
+                        <span>Tạm tính ({{ cart_items | length }} sản phẩm)</span>
+                        <span>{{ total | format_price }}</span>
+                    </div>
+                    <div class="flex justify-between text-dark-500">
+                        <span>Phí vận chuyển</span>
+                        <span class="{% if total >= 500000 %}text-emerald-600 font-medium{% endif %}">
+                            {% if total >= 500000 %}Miễn phí{% else %}30.000₫{% endif %}
+                        </span>
+                    </div>
+                    {% if total < 500000 %}
+                    <p class="text-xs text-primary-600 bg-primary-50 px-3 py-2 rounded-lg">
+                        💡 Mua thêm {{ (500000 - total) | format_price }} để được miễn phí vận chuyển!
+                    </p>
+                    {% endif %}
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-dark-200">
+                    <div class="flex justify-between items-baseline">
+                        <span class="font-semibold text-dark-800">Tổng cộng</span>
+                        <span class="text-xl font-bold text-dark-900">
+                            {% if total >= 500000 %}
+                            {{ total | format_price }}
+                            {% else %}
+                            {{ (total + 30000) | format_price }}
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+
+                <a href="{{ url_for('checkout.checkout_payment') }}" class="mt-6 block w-full py-3.5 bg-dark-900 text-white font-semibold rounded-xl hover:bg-primary-600 transition-all text-center shadow-lg">
+                    Tiến hành thanh toán
+                </a>
+
+                <a href="{{ url_for('home.index') }}" class="mt-3 block text-center text-sm text-dark-500 hover:text-primary-600 transition-colors">
+                    ← Tiếp tục mua sắm
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Empty Cart -->
+    <div class="text-center py-16 lg:py-24">
+        <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-dark-100 flex items-center justify-center">
+            <i data-lucide="shopping-bag" class="w-8 h-8 text-dark-300"></i>
+        </div>
+        <h2 class="text-xl font-semibold text-dark-700 mb-2">Giỏ hàng trống</h2>
+        <p class="text-dark-400 mb-6">Hãy khám phá và thêm sản phẩm yêu thích vào giỏ nhé!</p>
+        <a href="{{ url_for('home.index') }}" class="inline-flex items-center gap-2 px-8 py-3 bg-dark-900 text-white font-semibold rounded-full hover:bg-primary-600 transition-all">
+            <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+            Mua sắm ngay
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,4 +1,4 @@
-{% extends "admin/base_admin.html" %}
+{% extends 'admin/base_admin.html' %}
 {% block title %}Quản lý đơn hàng{% endblock %}
 {% block page_title %}Đơn hàng{% endblock %}
 {% block page_subtitle %}Quản lý và theo dõi tất cả đơn hàng{% endblock %}
@@ -23,7 +23,7 @@
         </select>
         <button type="submit" class="px-4 py-2 text-sm bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors">Lọc</button>
         {% if search or status_filter %}
-        <a href="{{ url_for('admin_orders') }}" class="px-3 py-2 text-sm text-dark-500 border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">Xóa lọc</a>
+        <a href="{{ url_for('admin.admin_orders') }}" class="px-3 py-2 text-sm text-dark-500 border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">Xóa lọc</a>
         {% endif %}
     </form>
 </div>
@@ -68,7 +68,7 @@
                     </td>
                     <td class="px-5 py-3 text-xs text-dark-500">{{ order.created_at.strftime('%d/%m/%Y') }}</td>
                     <td class="px-5 py-3">
-                        <a href="{{ url_for('admin_order_detail', order_id=order.id) }}"
+                        <a href="{{ url_for('admin.admin_order_detail', order_id=order.id) }}"
                            class="text-xs text-primary-600 hover:underline whitespace-nowrap">Xem chi tiết</a>
                     </td>
                 </tr>
@@ -89,11 +89,11 @@
         <p class="text-xs text-dark-500">Trang {{ orders.page }} / {{ orders.pages }}</p>
         <div class="flex gap-1">
             {% if orders.has_prev %}
-            <a href="{{ url_for('admin_orders', page=orders.prev_num, status=status_filter, search=search) }}"
+            <a href="{{ url_for('admin.admin_orders', page=orders.prev_num, status=status_filter, search=search) }}"
                class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50">Trước</a>
             {% endif %}
             {% if orders.has_next %}
-            <a href="{{ url_for('admin_orders', page=orders.next_num, status=status_filter, search=search) }}"
+            <a href="{{ url_for('admin.admin_orders', page=orders.next_num, status=status_filter, search=search) }}"
                class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50">Sau</a>
             {% endif %}
         </div>
