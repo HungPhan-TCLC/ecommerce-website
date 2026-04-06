@@ -67,8 +67,14 @@
                     <td class="px-5 py-3">
                         {% if user.id != current_user.id %}
                         <form method="POST" action="{{ url_for('admin.admin_user_toggle_admin', user_id=user.id) }}"
-                              onsubmit="return confirm('{% if user.is_admin %}Thu hồi quyền admin của {{ user.username }}?{% else %}Cấp quyền admin cho {{ user.username }}?{% endif %}')">
-                            <button type="submit"
+                              id="toggle-admin-{{ user.id }}" onsubmit="return false;">
+                            <button type="button"
+                                    data-title="{% if user.is_admin %}Thu hồi quyền Admin?{% else %}Cấp quyền Admin?{% endif %}"
+                                    data-msg="{% if user.is_admin %}Thu hồi quyền admin của {{ user.username }}? Họ sẽ trở thành user thường.{% else %}Cấp quyền admin cho {{ user.username }}? Họ sẽ quản lý được toàn bộ hệ thống.{% endif %}"
+                                    data-ok="{% if user.is_admin %}Thu hồi{% else %}Cấp quyền{% endif %}"
+                                    data-theme="{% if user.is_admin %}danger{% else %}primary{% endif %}"
+                                    data-icon="{% if user.is_admin %}cancel{% else %}shield{% endif %}"
+                                    data-form="toggle-admin-{{ user.id }}"
                                     class="text-xs px-2.5 py-1 rounded-lg border transition-colors
                                            {% if user.is_admin %}border-red-200 text-red-600 hover:bg-red-50{% else %}border-blue-200 text-blue-600 hover:bg-blue-50{% endif %}">
                                 {% if user.is_admin %}Thu hồi Admin{% else %}Cấp Admin{% endif %}
@@ -98,4 +104,16 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.querySelectorAll('[data-form]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var d = btn.dataset;
+        var form = document.getElementById(d.form);
+        luxeConfirm({ title: d.title, message: d.msg, okText: d.ok, theme: d.theme, icon: d.icon }, form);
+    });
+});
+</script>
 {% endblock %}

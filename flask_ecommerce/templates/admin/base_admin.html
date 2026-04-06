@@ -139,6 +139,104 @@
         document.getElementById('admin-sidebar').classList.toggle('-translate-x-full');
     });
 </script>
+
+<!-- ==================== LUXE CONFIRM MODAL ==================== -->
+<div id="luxe-confirm-overlay"
+     style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(15,23,42,0.55); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); align-items:center; justify-content:center;"
+     aria-modal="true" role="dialog">
+    <div id="luxe-confirm-box"
+         style="background:#fff; border-radius:1.25rem; padding:2rem; width:92%; max-width:420px;
+                box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); transform:scale(0.93); opacity:0;
+                transition:transform 0.22s cubic-bezier(.34,1.56,.64,1), opacity 0.18s ease;
+                font-family:'Inter',sans-serif; position:relative;">
+        <div id="luxe-confirm-icon"
+             style="width:3rem; height:3rem; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 1rem;"></div>
+        <h3 id="luxe-confirm-title"
+            style="font-size:1.05rem; font-weight:700; color:#0f172a; text-align:center; margin:0 0 0.5rem;"></h3>
+        <p id="luxe-confirm-message"
+           style="font-size:0.875rem; color:#64748b; text-align:center; line-height:1.6; margin:0 0 1.75rem;"></p>
+        <div style="display:flex; gap:0.75rem;">
+            <button id="luxe-confirm-cancel"
+                    style="flex:1; padding:0.65rem 1rem; border-radius:0.75rem; border:1.5px solid #e2e8f0;
+                           background:#f8fafc; color:#475569; font-size:0.875rem; font-weight:600;
+                           cursor:pointer; transition:all 0.15s; font-family:inherit;"
+                    onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'">
+                Hủy bỏ
+            </button>
+            <button id="luxe-confirm-ok"
+                    style="flex:1; padding:0.65rem 1rem; border-radius:0.75rem; border:none;
+                           font-size:0.875rem; font-weight:600; cursor:pointer;
+                           transition:all 0.15s; font-family:inherit; color:#fff;">
+                Xác nhận
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var overlay  = document.getElementById('luxe-confirm-overlay');
+    var box      = document.getElementById('luxe-confirm-box');
+    var iconEl   = document.getElementById('luxe-confirm-icon');
+    var titleEl  = document.getElementById('luxe-confirm-title');
+    var msgEl    = document.getElementById('luxe-confirm-message');
+    var btnOk    = document.getElementById('luxe-confirm-ok');
+    var btnCancel= document.getElementById('luxe-confirm-cancel');
+    var _cb = null;
+
+    function open(opts) {
+        var theme = opts.theme || 'danger';
+        var colors = {
+            danger:  { bg:'#fef2f2', ic:'#ef4444', btn:'linear-gradient(135deg,#ef4444,#dc2626)' },
+            warning: { bg:'#fffbeb', ic:'#f59e0b', btn:'linear-gradient(135deg,#f59e0b,#d97706)' },
+            info:    { bg:'#eff6ff', ic:'#3b82f6', btn:'linear-gradient(135deg,#3b82f6,#2563eb)' },
+            primary: { bg:'#fdf2f8', ic:'#db2777', btn:'linear-gradient(135deg,#db2777,#be185d)' },
+        };
+        var c = colors[theme] || colors.danger;
+        var icons = {
+            trash:   '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>',
+            cancel:  '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+            warning: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+            shield:  '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+            check:   '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+        };
+        iconEl.style.background = c.bg;
+        iconEl.style.color = c.ic;
+        iconEl.innerHTML = icons[opts.icon || 'warning'] || icons.warning;
+        titleEl.textContent = opts.title || 'Xác nhận hành động';
+        msgEl.textContent   = opts.message || '';
+        btnOk.style.background = c.btn;
+        btnOk.textContent  = opts.okText || 'Xác nhận';
+        btnOk.onmouseover  = function(){ this.style.opacity='0.88'; };
+        btnOk.onmouseout   = function(){ this.style.opacity='1'; };
+        overlay.style.display = 'flex';
+        requestAnimationFrame(function(){
+            requestAnimationFrame(function(){
+                box.style.transform = 'scale(1)';
+                box.style.opacity   = '1';
+            });
+        });
+    }
+
+    function close() {
+        box.style.transform = 'scale(0.93)';
+        box.style.opacity   = '0';
+        setTimeout(function(){ overlay.style.display = 'none'; }, 200);
+    }
+
+    btnCancel.addEventListener('click', function() { close(); if(_cb) _cb(false); _cb=null; });
+    btnOk.addEventListener('click', function() { close(); if(_cb) _cb(true); _cb=null; });
+    overlay.addEventListener('click', function(e){ if(e.target===overlay){ close(); if(_cb) _cb(false); _cb=null; } });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape' && overlay.style.display!=='none'){ close(); if(_cb) _cb(false); _cb=null; } });
+
+    window.luxeConfirm = function(opts, form) {
+        if (typeof opts === 'string') opts = { message: opts };
+        open(opts);
+        _cb = function(confirmed) { if(confirmed && form) form.submit(); };
+    };
+})();
+</script>
+
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

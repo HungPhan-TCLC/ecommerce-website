@@ -1,11 +1,14 @@
 """
-setup_and_seed.py - Kết hợp Migration + Seed Data cho Evaluation
-=================================================================
+setup_and_seed.py - Migration + Seed Evaluation Data
+=====================================================
 Script này làm 2 việc:
   1. MIGRATE: Tạo tables mới (evaluation_results) và thêm cột source
              vào user_interactions nếu chưa có.
-  2. SEED EVAL: Thêm 15 user mới + ~200 interactions phong phú
-                để hệ thống đánh giá có đủ data.
+  2. SEED EVAL: Thêm 15 user evaluation (nếu chưa có) + ~200 interactions
+                phong phú để hệ thống đánh giá có đủ data.
+
+Static profiles của 15 eval users → seed_static.sql (phần EVAL USERS)
+Dynamic data (interactions, orders, timestamps) → file này
 
 * KHÔNG xóa data cũ — chỉ thêm vào.
 * Bỏ qua nếu user/product đã tồn tại.
@@ -20,37 +23,40 @@ from datetime import datetime, timedelta
 
 from app import create_app
 from models import db, User, Category, Product, UserInteraction, Order, OrderItem, EvaluationResult
-from werkzeug.security import generate_password_hash
 
 
 # ─── Cấu hình seed ────────────────────────────────────────────────────────────
 RANDOM_SEED        = 99        # Seed cố định để tái tạo được
-NUM_EVAL_USERS     = 15        # Số user mới thêm vào
+NUM_EVAL_USERS     = 15        # Số user evaluation
 MIN_INTERACTIONS   = 12        # Tối thiểu interactions/user (để split 80/20 có test set)
 MAX_INTERACTIONS   = 22        # Tối đa interactions/user
 NUM_CART           = 5         # Số sản phẩm thêm vào giỏ/user
 NUM_PURCHASE       = 3         # Số sản phẩm mua/user
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Đường dẫn đến file SQL static (chứa eval users profiles)
+SQL_FILE = os.path.join(os.path.dirname(__file__), "seed_static.sql")
 
-# ─── 15 User profiles đa dạng cho evaluation ──────────────────────────────────
+# ─── 15 Eval user profiles (chỉ dùng để map preferences khi seed interactions) ────────
+# Username/email/password_hash đã được đưa vào seed_static.sql.
+# List này chỉ còn vai trò là preference map cho step_seed_interactions().
 EVAL_USERS = [
     # (username, email, full_name, gender_pref, styles, categories)
-    ("linh_trang",   "linhtrang@eval.vn",   "Đinh Linh Trang",    ["nu","unisex"],    ["casual","formal"],     ["ao-nu","vay-dam","phu-kien"]),
-    ("an_khang",     "ankhang@eval.vn",     "Bùi An Khang",       ["nam","unisex"],   ["streetwear","casual"], ["ao-nam","quan-nam","giay-dep"]),
-    ("phuong_anh",   "phuonganh@eval.vn",   "Cao Phương Anh",     ["nu","unisex"],    ["formal"],              ["ao-nu","vay-dam","giay-dep"]),
-    ("tuan_kiet",    "tuankiet@eval.vn",     "Ngô Tuấn Kiệt",      ["nam","unisex"],   ["sporty","casual"],     ["ao-nam","quan-nam","giay-dep"]),
-    ("thu_ha",       "thuha@eval.vn",        "Đặng Thu Hà",        ["nu","unisex"],    ["casual"],              ["ao-nu","quan-nu","phu-kien"]),
-    ("minh_chau",    "minhchau@eval.vn",    "Trịnh Minh Châu",    ["nu","unisex"],    ["casual","formal"],     ["vay-dam","quan-nu","phu-kien"]),
-    ("hai_dang",     "haidang@eval.vn",      "Lý Hải Đăng",        ["nam","unisex"],   ["formal"],              ["ao-nam","quan-nam","giay-dep","phu-kien"]),
-    ("bao_anh",      "baoanhev@eval.vn",     "Nguyễn Bảo Anh",     ["nu","unisex"],    ["streetwear","casual"], ["ao-nu","quan-nu","giay-dep"]),
-    ("viet_hung",    "viethung@eval.vn",     "Phạm Việt Hùng",     ["nam","unisex"],   ["streetwear"],          ["ao-nam","quan-nam","giay-dep"]),
-    ("khanh_linh",   "khanhlinh@eval.vn",   "Hồ Khánh Linh",     ["nu","unisex"],    ["formal","casual"],     ["vay-dam","ao-nu","giay-dep"]),
-    ("duc_minh",     "ducminh@eval.vn",      "Tô Đức Minh",        ["nam","unisex"],   ["casual","sporty"],     ["ao-nam","quan-nam","giay-dep"]),
-    ("thanh_van",    "thanhvan@eval.vn",    "Lê Thanh Vân",       ["nu","unisex"],    ["casual","formal"],     ["ao-nu","vay-dam","quan-nu"]),
-    ("quoc_bao",     "quocbao@eval.vn",      "Mai Quốc Bảo",       ["nam","unisex"],   ["formal","casual"],     ["ao-nam","quan-nam","phu-kien"]),
-    ("ngoc_han",     "ngochan@eval.vn",      "Dương Ngọc Hân",     ["nu","unisex"],    ["casual","streetwear"], ["ao-nu","quan-nu","giay-dep"]),
-    ("bach_khoa",    "bachkhoa@eval.vn",    "Võ Bách Khoa",       ["nam","unisex"],   ["sporty","streetwear"], ["ao-nam","quan-nam","giay-dep"]),
+    ("linh_trang",  "linhtrang@eval.vn",  "Đinh Linh Trang",  ["nu","unisex"],   ["casual","formal"],     ["ao-nu","vay-dam","phu-kien"]),
+    ("an_khang",    "ankhang@eval.vn",    "Bùi An Khang",     ["nam","unisex"],  ["streetwear","casual"], ["ao-nam","quan-nam","giay-dep"]),
+    ("phuong_anh",  "phuonganh@eval.vn",  "Cao Phương Anh",   ["nu","unisex"],   ["formal"],              ["ao-nu","vay-dam","giay-dep"]),
+    ("tuan_kiet",   "tuankiet@eval.vn",   "Ngô Tuấn Kiệt",   ["nam","unisex"],  ["sporty","casual"],     ["ao-nam","quan-nam","giay-dep"]),
+    ("thu_ha",      "thuha@eval.vn",      "Đặng Thu Hà",     ["nu","unisex"],   ["casual"],              ["ao-nu","quan-nu","phu-kien"]),
+    ("minh_chau",   "minhchau@eval.vn",   "Trịnh Minh Châu", ["nu","unisex"],   ["casual","formal"],     ["vay-dam","quan-nu","phu-kien"]),
+    ("hai_dang",    "haidang@eval.vn",    "Lý Hải Đăng",     ["nam","unisex"],  ["formal"],              ["ao-nam","quan-nam","giay-dep","phu-kien"]),
+    ("bao_anh",     "baoanhev@eval.vn",   "Nguyễn Bảo Anh",  ["nu","unisex"],   ["streetwear","casual"], ["ao-nu","quan-nu","giay-dep"]),
+    ("viet_hung",   "viethung@eval.vn",   "Phạm Việt Hùng",  ["nam","unisex"],  ["streetwear"],          ["ao-nam","quan-nam","giay-dep"]),
+    ("khanh_linh",  "khanhlinh@eval.vn",  "Hồ Khánh Linh",  ["nu","unisex"],   ["formal","casual"],     ["vay-dam","ao-nu","giay-dep"]),
+    ("duc_minh",    "ducminh@eval.vn",    "Tô Đức Minh",     ["nam","unisex"],  ["casual","sporty"],     ["ao-nam","quan-nam","giay-dep"]),
+    ("thanh_van",   "thanhvan@eval.vn",   "Lê Thanh Vân",    ["nu","unisex"],   ["casual","formal"],     ["ao-nu","vay-dam","quan-nu"]),
+    ("quoc_bao",    "quocbao@eval.vn",    "Mai Quốc Bảo",    ["nam","unisex"],  ["formal","casual"],     ["ao-nam","quan-nam","phu-kien"]),
+    ("ngoc_han",    "ngochan@eval.vn",    "Dương Ngọc Hân",  ["nu","unisex"],   ["casual","streetwear"], ["ao-nu","quan-nu","giay-dep"]),
+    ("bach_khoa",   "bachkhoa@eval.vn",   "Võ Bách Khoa",    ["nam","unisex"],  ["sporty","streetwear"], ["ao-nam","quan-nam","giay-dep"]),
 ]
 
 
@@ -95,42 +101,30 @@ def step_migrate(app):
 
 
 def step_seed_eval_users(app):
-    """Bước 2: Thêm 15 user evaluation nếu chưa tồn tại."""
+    """
+    Bước 2: Lấy danh sách ID của 15 eval users từ DB.
+    Users đã được INSERT sẵn vào bảng users bởi seed_static.sql.
+    """
     print("\n" + "=" * 55)
-    print("  BƯỚC 2: SEED EVALUATION USERS (15 users)")
+    print("  BƯỚC 2: LẤY EVAL USER IDs TỪ DB")
     print("=" * 55)
 
     with app.app_context():
-        created = 0
-        skipped = 0
-        user_ids = []  # Chỉ lưu IDs, không lưu objects
+        usernames = [row[0] for row in EVAL_USERS]
+        users = User.query.filter(User.username.in_(usernames)).all()
+        user_ids = [u.id for u in users]
 
-        for (username, email, full_name, *_) in EVAL_USERS:
-            existing = User.query.filter_by(username=username).first()
-            if existing:
-                user_ids.append(existing.id)
-                skipped += 1
-                continue
+        missing = set(usernames) - {u.username for u in users}
+        if missing:
+            print(f"[WARN] {len(missing)} eval users chưa có trong DB: {missing}")
+            print("       Hãy chạy seed_data.py trước để seed từ seed_static.sql.")
+        else:
+            print(f"[OK] Tìm thấy đủ {len(user_ids)} eval users trong DB.")
 
-            user = User(
-                username=username,
-                email=email,
-                password_hash=generate_password_hash("evalpass123"),
-                full_name=full_name,
-                is_admin=False,
-                created_at=datetime.utcnow() - timedelta(days=random.randint(30, 120)),
-            )
-            db.session.add(user)
-            db.session.flush()  # Lấy ID ngay sau khi add
-            user_ids.append(user.id)
-            created += 1
-
-        db.session.commit()
-        print(f"[OK] Tạo mới: {created} users | Đã tồn tại (skip): {skipped} users.")
-        return user_ids  # Trả về list[int] IDs
+        return user_ids
 
 
-def step_seed_interactions(app, user_ids: list[int]):
+def step_seed_interactions(app, user_ids: list):
     """
     Bước 3: Seed interactions phong phú cho evaluation.
 
@@ -159,8 +153,7 @@ def step_seed_interactions(app, user_ids: list[int]):
         skipped_users      = 0
 
         for idx, user_id in enumerate(user_ids):
-            # Re-query User bên trong context hiện tại
-            user = User.query.get(user_id)
+            user = db.session.get(User, user_id)
             if user is None:
                 print(f"  [WARN] User ID {user_id} không tìm thấy, bỏ qua.")
                 continue
@@ -195,16 +188,13 @@ def step_seed_interactions(app, user_ids: list[int]):
             # ── Phase 1: VIEW (train set — 60 đến 15 ngày trước) ──────────────
             num_views = random.randint(10, 18)
             view_products = random.sample(preferred, min(num_views, len(preferred)))
-
-            # Thêm vài sản phẩm "ngoài sở thích" — tạo noise thực tế
             noise = random.sample(other, min(3, len(other)))
             view_products = list(set(view_products + noise))
 
             for product in view_products:
-                days_ago = random.randint(15, 60)  # Trong train set
+                days_ago = random.randint(15, 60)
                 db.session.add(UserInteraction(
-                    user_id=user.id,
-                    product_id=product.id,
+                    user_id=user.id, product_id=product.id,
                     interaction_type="view",
                     rating=round(random.uniform(2.5, 5.0), 1),
                     source=random.choice(["homepage", "search", "category", "direct"]),
@@ -222,8 +212,7 @@ def step_seed_interactions(app, user_ids: list[int]):
             for product in cart_products:
                 days_ago = random.randint(8, 14)
                 db.session.add(UserInteraction(
-                    user_id=user.id,
-                    product_id=product.id,
+                    user_id=user.id, product_id=product.id,
                     interaction_type="cart",
                     rating=round(random.uniform(3.5, 5.0), 1),
                     source=random.choice(["recommendation", "search", "direct"]),
@@ -232,9 +221,7 @@ def step_seed_interactions(app, user_ids: list[int]):
                 total_interactions += 1
 
             # ── Phase 3: PURCHASE (test set — 7 đến 1 ngày trước) ────────────
-            # Đây sẽ là ground truth cho offline evaluation
             num_purchases = random.randint(2, NUM_PURCHASE + 1)
-            # Mua từ giỏ hàng hoặc preferred products chưa xem
             purchase_candidates = list(set(cart_products))
             new_products = [p for p in preferred if p not in view_products]
             if new_products:
@@ -246,10 +233,9 @@ def step_seed_interactions(app, user_ids: list[int]):
             )
 
             for product in purchase_products:
-                days_ago = random.randint(1, 7)  # Gần đây → sẽ vào test set
+                days_ago = random.randint(1, 7)
                 db.session.add(UserInteraction(
-                    user_id=user.id,
-                    product_id=product.id,
+                    user_id=user.id, product_id=product.id,
                     interaction_type="purchase",
                     rating=round(random.uniform(4.0, 5.0), 1),
                     source=random.choice(["recommendation", "direct"]),
@@ -313,7 +299,6 @@ def step_seed_recommendation_source_interactions(app):
             print("[SKIP] Không đủ user/product.")
             return
 
-        # Chỉ seed nếu chưa có interaction từ recommendation source
         existing_rec = UserInteraction.query.filter_by(source="recommendation").count()
         if existing_rec > 30:
             print(f"[SKIP] Đã có {existing_rec} interactions từ 'recommendation'.")
@@ -321,36 +306,29 @@ def step_seed_recommendation_source_interactions(app):
 
         total = 0
         for user in random.sample(users, min(10, len(users))):
-            # Simulate: user thấy 5-8 sản phẩm từ trang recommendations
             shown_products = random.sample(products, random.randint(5, 8))
 
             for product in shown_products:
-                # View (= impression click từ rec page)
                 db.session.add(UserInteraction(
-                    user_id=user.id,
-                    product_id=product.id,
+                    user_id=user.id, product_id=product.id,
                     interaction_type="view",
                     source="recommendation",
                     created_at=datetime.utcnow() - timedelta(hours=random.randint(1, 72)),
                 ))
                 total += 1
 
-                # 30% chance thêm vào giỏ
                 if random.random() < 0.30:
                     db.session.add(UserInteraction(
-                        user_id=user.id,
-                        product_id=product.id,
+                        user_id=user.id, product_id=product.id,
                         interaction_type="cart",
                         source="recommendation",
                         created_at=datetime.utcnow() - timedelta(hours=random.randint(1, 48)),
                     ))
                     total += 1
 
-                    # 40% trong số đó mua luôn
                     if random.random() < 0.40:
                         db.session.add(UserInteraction(
-                            user_id=user.id,
-                            product_id=product.id,
+                            user_id=user.id, product_id=product.id,
                             interaction_type="purchase",
                             source="recommendation",
                             created_at=datetime.utcnow() - timedelta(hours=random.randint(1, 24)),
@@ -360,9 +338,8 @@ def step_seed_recommendation_source_interactions(app):
         db.session.commit()
         print(f"[OK] Thêm {total} interactions với source='recommendation'.")
 
-        # Tóm tắt online metrics data
-        views    = UserInteraction.query.filter_by(source="recommendation", interaction_type="view").count()
-        carts    = UserInteraction.query.filter_by(source="recommendation", interaction_type="cart").count()
+        views     = UserInteraction.query.filter_by(source="recommendation", interaction_type="view").count()
+        carts     = UserInteraction.query.filter_by(source="recommendation", interaction_type="cart").count()
         purchases = UserInteraction.query.filter_by(source="recommendation", interaction_type="purchase").count()
         print(f"     → Views: {views} | Carts: {carts} | Purchases: {purchases}")
         if views > 0:
@@ -375,20 +352,17 @@ def print_summary(app):
     print("  TỔNG KẾT")
     print("=" * 55)
     with app.app_context():
-        from models import Category, EvaluationResult
-
-        total_users   = User.query.count()
+        total_users    = User.query.count()
         total_products = Product.query.count()
-        total_inter   = UserInteraction.query.count()
-        total_orders  = Order.query.count()
-        total_evals   = EvaluationResult.query.count()
+        total_inter    = UserInteraction.query.count()
+        total_orders   = Order.query.count()
+        total_evals    = EvaluationResult.query.count()
 
         inter_view  = UserInteraction.query.filter_by(interaction_type="view").count()
         inter_cart  = UserInteraction.query.filter_by(interaction_type="cart").count()
         inter_purch = UserInteraction.query.filter_by(interaction_type="purchase").count()
         inter_rec   = UserInteraction.query.filter_by(source="recommendation").count()
 
-        # Users đủ điều kiện cho offline eval (≥ 4 interactions)
         from sqlalchemy import func
         qualified = db.session.query(
             UserInteraction.user_id
@@ -420,9 +394,9 @@ def main():
     # Bước 1: Migrate
     step_migrate(app)
 
-    # Bước 2-4: Seed (dùng chung app context)
-    user_objects = step_seed_eval_users(app)
-    step_seed_interactions(app, user_objects)
+    # Bước 2-4: Seed
+    user_ids = step_seed_eval_users(app)
+    step_seed_interactions(app, user_ids)
     step_seed_recommendation_source_interactions(app)
 
     # Tổng kết

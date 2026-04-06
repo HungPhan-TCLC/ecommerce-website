@@ -35,8 +35,13 @@
                         </a>
                         {% if cat.products | length == 0 %}
                         <form method="POST" action="{{ url_for('admin.admin_category_delete', cat_id=cat.id) }}"
-                              onsubmit="return confirm('Xóa danh mục \'{{ cat.name }}\'?')">
-                            <button type="submit" class="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title="Xóa">
+                              id="del-cat-{{ cat.id }}" onsubmit="return false;">
+                            <button type="button"
+                                    data-title="Xóa danh mục?"
+                                    data-msg="Xóa danh mục '{{ cat.name }}'? Hành động này không thể hoàn tác."
+                                    data-ok="Xóa" data-theme="danger" data-icon="trash"
+                                    data-form="del-cat-{{ cat.id }}"
+                                    class="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title="Xóa">
                                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                             </button>
                         </form>
@@ -101,6 +106,13 @@ document.querySelector('input[name="name"]').addEventListener('input', function(
 });
 document.querySelector('input[name="slug"]').addEventListener('input', function() {
     this.dataset.edited = 'true';
+});
+document.querySelectorAll('[data-form]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var d = btn.dataset;
+        var form = document.getElementById(d.form);
+        luxeConfirm({ title: d.title, message: d.msg, okText: d.ok, theme: d.theme, icon: d.icon }, form);
+    });
 });
 </script>
 {% endblock %}

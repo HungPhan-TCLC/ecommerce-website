@@ -112,9 +112,13 @@
                     </form>
 
                     <!-- COD -->
-                    <form method="POST" onsubmit="return confirm('Xác nhận thanh toán khi nhận hàng?')">
+                    <form method="POST" id="cod-form" onsubmit="return false;">
                         <input type="hidden" name="method" value="cod">
-                        <button type="submit"
+                        <button type="button" id="cod-btn"
+                                data-title="Xác nhận thanh toán COD"
+                                data-msg="Bạn chắc chắn thanh toán khi nhận hàng? Đơn hàng sẽ được xử lý ngay."
+                                data-ok="Xác nhận" data-theme="info" data-icon="check"
+                                data-form="cod-form"
                                 class="w-full flex items-center gap-4 p-4 border-2 border-dark-100 rounded-xl hover:border-emerald-400 hover:bg-emerald-50 transition-all group text-left">
                             <div class="w-12 h-9 bg-emerald-600 rounded-lg flex items-center justify-center flex-shrink-0">
                                 <i data-lucide="banknote" class="w-5 h-5 text-white"></i>
@@ -132,8 +136,12 @@
                 <!-- Hủy đơn hàng -->
                 <div class="mt-5 pt-5 border-t border-dark-100">
                     <form method="POST" action="{{ url_for('orders.cancel_pending_order', order_id=order.id) }}"
-                          onsubmit="return confirm('Hủy đơn hàng #{{ '%04d' % order.id }}? Hành động này không thể hoàn tác.')">
-                        <button type="submit"
+                          id="retry-cancel-form" onsubmit="return false;">
+                        <button type="button" id="retry-cancel-btn"
+                                data-title="Hủy đơn hàng?"
+                                data-msg="Hủy đơn hàng #{{ '%04d' % order.id }}? Hành động này không thể hoàn tác."
+                                data-ok="Hủy đơn" data-theme="danger" data-icon="cancel"
+                                data-form="retry-cancel-form"
                                 class="w-full py-2.5 text-sm text-red-500 border border-red-200 rounded-xl hover:bg-red-50 transition-colors">
                             Hủy đơn hàng này
                         </button>
@@ -144,4 +152,22 @@
 
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.querySelectorAll('[data-form]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var d = btn.dataset;
+        var form = document.getElementById(d.form);
+        luxeConfirm({
+            title:   d.title   || 'Xác nhận',
+            message: d.msg     || '',
+            okText:  d.ok      || 'Xác nhận',
+            theme:   d.theme   || 'danger',
+            icon:    d.icon    || 'warning',
+        }, form);
+    });
+});
+</script>
 {% endblock %}
