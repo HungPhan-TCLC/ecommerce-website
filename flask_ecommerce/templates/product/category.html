@@ -17,15 +17,46 @@
         {% if category.description %}
         <p class="text-dark-400 mt-1">{{ category.description }}</p>
         {% endif %}
-        <p class="text-sm text-dark-400 mt-2">{{ products | length }} sản phẩm</p>
     </div>
 
-    {% if products %}
+    {% if products.items %}
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
-        {% for product in products %}
+        {% for product in products.items %}
         {% include 'common/_product_card.html' %}
         {% endfor %}
     </div>
+
+    <!-- Pagination -->
+    {% if products.pages > 1 %}
+    <div class="flex items-center justify-center gap-1.5 mt-10">
+        {% if products.has_prev %}
+        <a href="{{ url_for('product.category_products', slug=category.slug, page=products.prev_num) }}"
+           class="inline-flex items-center gap-1 px-3 py-2 text-sm border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors text-dark-600">
+            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+        </a>
+        {% endif %}
+
+        {% for p in products.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if p %}
+            <a href="{{ url_for('product.category_products', slug=category.slug, page=p) }}"
+               class="inline-flex items-center justify-center w-9 h-9 text-sm rounded-lg border transition-colors
+                      {% if p == products.page %}bg-primary-600 text-white border-primary-600 font-semibold{% else %}border-dark-200 text-dark-600 hover:bg-dark-50{% endif %}">
+                {{ p }}
+            </a>
+            {% else %}
+            <span class="inline-flex items-center justify-center w-9 h-9 text-sm text-dark-400">…</span>
+            {% endif %}
+        {% endfor %}
+
+        {% if products.has_next %}
+        <a href="{{ url_for('product.category_products', slug=category.slug, page=products.next_num) }}"
+           class="inline-flex items-center gap-1 px-3 py-2 text-sm border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors text-dark-600">
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
     {% else %}
     <div class="text-center py-16">
         <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-100 flex items-center justify-center">

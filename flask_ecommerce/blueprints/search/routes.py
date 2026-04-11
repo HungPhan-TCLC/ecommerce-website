@@ -146,6 +146,7 @@ def search():
     price_min_raw   = request.args.get("price_min", "").strip()
     price_max_raw   = request.args.get("price_max", "").strip()
     sort_by         = request.args.get("sort", "relevant")
+    page            = request.args.get("page", 1, type=int)
 
     try:
         price_min = float(price_min_raw) if price_min_raw else None
@@ -161,7 +162,8 @@ def search():
         price_min, price_max, sort_by
     )
 
-    products = product_query.all()
+    pagination = product_query.paginate(page=page, per_page=32, error_out=False)
+    products   = pagination.items
 
     all_categories_full = Category.query.order_by(Category.name).all()
 
@@ -207,6 +209,7 @@ def search():
     return render_template(
         "search/search.html",
         products=products,
+        pagination=pagination,
         query=q,
         all_categories=all_categories,
         gender_options=gender_options,
