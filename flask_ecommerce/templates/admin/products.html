@@ -10,22 +10,27 @@
     <form method="GET" class="flex gap-2 flex-1">
         <div class="relative flex-1 max-w-xs">
             <input type="text" name="search" value="{{ search }}" placeholder="Tìm tên sản phẩm..."
-                   class="w-full pl-9 pr-3 py-2 text-sm border border-dark-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400">
+                class="w-full pl-9 pr-3 py-2 text-sm border border-dark-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400">
             <i data-lucide="search" class="absolute left-2.5 top-2.5 w-4 h-4 text-dark-400"></i>
         </div>
-        <select name="category" class="text-sm border border-dark-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300">
+        <select name="category"
+            class="text-sm border border-dark-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300">
             <option value="">Tất cả danh mục</option>
             {% for cat in categories %}
-            <option value="{{ cat.id }}" {% if category_filter == cat.id|string %}selected{% endif %}>{{ cat.name }}</option>
+            <option value="{{ cat.id }}" {% if category_filter==cat.id|string %}selected{% endif %}>{{ cat.name }}
+            </option>
             {% endfor %}
         </select>
-        <button type="submit" class="px-4 py-2 text-sm bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors">Lọc</button>
+        <button type="submit"
+            class="px-4 py-2 text-sm bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors">Lọc</button>
         {% if search or category_filter %}
-        <a href="{{ url_for('admin.admin_products') }}" class="px-3 py-2 text-sm text-dark-500 border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">Xóa lọc</a>
+        <a href="{{ url_for('admin.admin_products') }}"
+            class="px-3 py-2 text-sm text-dark-500 border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">Xóa
+            lọc</a>
         {% endif %}
     </form>
     <a href="{{ url_for('admin.admin_product_create') }}"
-       class="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors flex-shrink-0">
+        class="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors flex-shrink-0">
         <i data-lucide="plus" class="w-4 h-4"></i>
         Thêm sản phẩm
     </a>
@@ -37,13 +42,19 @@
         <table class="w-full text-sm">
             <thead class="bg-dark-50 border-b border-dark-100">
                 <tr>
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide w-12">ID</th>
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Sản phẩm</th>
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Danh mục</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide w-12">ID
+                    </th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Sản phẩm
+                    </th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Danh mục
+                    </th>
                     <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Giá</th>
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Tồn kho</th>
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Nổi bật</th>
-                    <th class="px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide text-right">Thao tác</th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Tồn kho
+                    </th>
+                    <th class="text-left px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide">Nổi bật
+                    </th>
+                    <th class="px-5 py-3 text-xs font-semibold text-dark-500 uppercase tracking-wide text-right">Thao
+                        tác</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-dark-100">
@@ -53,15 +64,17 @@
                     <td class="px-5 py-3">
                         <div class="flex items-center gap-3">
                             <img src="{{ product.image_url }}" alt="{{ product.name }}"
-                                 class="w-10 h-12 object-cover rounded-lg bg-dark-100 flex-shrink-0">
+                                class="w-10 h-12 object-cover rounded-lg bg-dark-100 flex-shrink-0">
                             <div>
-                                <p class="font-medium text-dark-800 leading-tight">{{ product.name[:45] }}{% if product.name|length > 45 %}...{% endif %}</p>
+                                <p class="font-medium text-dark-800 leading-tight">{{ product.name[:45] }}{% if
+                                    product.name|length > 45 %}...{% endif %}</p>
                                 <p class="text-xs text-dark-400 mt-0.5">{{ product.style }} · {{ product.gender }}</p>
                             </div>
                         </div>
                     </td>
                     <td class="px-5 py-3">
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-dark-100 text-dark-600">
+                        <span
+                            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-dark-100 text-dark-600">
                             {{ product.category.name }}
                         </span>
                     </td>
@@ -72,13 +85,15 @@
                         {% endif %}
                     </td>
                     <td class="px-5 py-3">
-                        <span class="text-sm font-medium {% if product.stock < 10 %}text-red-600{% elif product.stock < 30 %}text-amber-600{% else %}text-emerald-600{% endif %}">
-                            {{ product.stock }}
+                        <span
+                            class="text-sm font-medium {% if product.available_stock < 10 %}text-red-600{% elif product.available_stock < 30 %}text-amber-600{% else %}text-emerald-600{% endif %}">
+                            {{ product.available_stock }}
                         </span>
                     </td>
                     <td class="px-5 py-3">
                         {% if product.is_featured %}
-                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">
+                        <span
+                            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">
                             <i data-lucide="star" class="w-3 h-3"></i> HOT
                         </span>
                         {% else %}
@@ -88,21 +103,24 @@
                     <td class="px-5 py-3 text-right">
                         <div class="flex items-center justify-end gap-2">
                             <a href="{{ url_for('product.product_detail', product_id=product.id) }}" target="_blank"
-                               class="p-1.5 text-dark-400 hover:text-dark-700 hover:bg-dark-100 rounded transition-colors" title="Xem trên shop">
+                                class="p-1.5 text-dark-400 hover:text-dark-700 hover:bg-dark-100 rounded transition-colors"
+                                title="Xem trên shop">
                                 <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
                             </a>
                             <a href="{{ url_for('admin.admin_product_edit', product_id=product.id) }}"
-                               class="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors" title="Chỉnh sửa">
+                                class="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                                title="Chỉnh sửa">
                                 <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                             </a>
-                            <form method="POST" action="{{ url_for('admin.admin_product_delete', product_id=product.id) }}"
-                                  id="del-prod-{{ product.id }}" onsubmit="return false;">
-                                <button type="button"
-                                        data-title="Xóa sản phẩm?"
-                                        data-msg="Xóa '{{ product.name[:40] }}{% if product.name|length > 40 %}...{% endif %}'? Hành động này không thể hoàn tác."
-                                        data-ok="Xóa" data-theme="danger" data-icon="trash"
-                                        data-form="del-prod-{{ product.id }}"
-                                        class="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title="Xóa">
+                            <form method="POST"
+                                action="{{ url_for('admin.admin_product_delete', product_id=product.id) }}"
+                                id="del-prod-{{ product.id }}" onsubmit="return false;">
+                                <button type="button" data-title="Xóa sản phẩm?"
+                                    data-msg="Xóa '{{ product.name[:40] }}{% if product.name|length > 40 %}...{% endif %}'? Hành động này không thể hoàn tác."
+                                    data-ok="Xóa" data-theme="danger" data-icon="trash"
+                                    data-form="del-prod-{{ product.id }}"
+                                    class="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                    title="Xóa">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                                 </button>
                             </form>
@@ -125,25 +143,26 @@
     {% if products.pages > 1 %}
     <div class="px-5 py-4 border-t border-dark-100 flex items-center justify-between">
         <p class="text-xs text-dark-500">
-            Hiển thị {{ ((products.page-1)*15)+1 }}–{{ [products.page*15, products.total]|min }} / {{ products.total }} sản phẩm
+            Hiển thị {{ ((products.page-1)*15)+1 }}–{{ [products.page*15, products.total]|min }} / {{ products.total }}
+            sản phẩm
         </p>
         <div class="flex gap-1">
             {% if products.has_prev %}
             <a href="{{ url_for('admin.admin_products', page=products.prev_num, search=search, category=category_filter) }}"
-               class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">&lt;</a>
+                class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">&lt;</a>
             {% endif %}
             {% for p in products.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-                {% if p %}
-                <a href="{{ url_for('admin.admin_products', page=p, search=search, category=category_filter) }}"
-                   class="px-3 py-1.5 text-xs border rounded-lg transition-colors
+            {% if p %}
+            <a href="{{ url_for('admin.admin_products', page=p, search=search, category=category_filter) }}"
+                class="px-3 py-1.5 text-xs border rounded-lg transition-colors
                           {% if p == products.page %}bg-primary-600 text-white border-primary-600{% else %}border-dark-200 hover:bg-dark-50{% endif %}">{{ p }}</a>
-                {% else %}
-                <span class="px-2 py-1.5 text-xs text-dark-400">…</span>
-                {% endif %}
+            {% else %}
+            <span class="px-2 py-1.5 text-xs text-dark-400">…</span>
+            {% endif %}
             {% endfor %}
             {% if products.has_next %}
             <a href="{{ url_for('admin.admin_products', page=products.next_num, search=search, category=category_filter) }}"
-               class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">&gt;</a>
+                class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">&gt;</a>
             {% endif %}
         </div>
     </div>
@@ -153,12 +172,12 @@
 
 {% block extra_scripts %}
 <script>
-document.querySelectorAll('[data-form]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        var d = btn.dataset;
-        var form = document.getElementById(d.form);
-        luxeConfirm({ title: d.title, message: d.msg, okText: d.ok, theme: d.theme, icon: d.icon }, form);
+    document.querySelectorAll('[data-form]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var d = btn.dataset;
+            var form = document.getElementById(d.form);
+            luxeConfirm({ title: d.title, message: d.msg, okText: d.ok, theme: d.theme, icon: d.icon }, form);
+        });
     });
-});
 </script>
 {% endblock %}

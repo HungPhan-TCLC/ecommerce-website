@@ -152,7 +152,14 @@ def admin_product_edit(product_id):
             product.material     = request.form.get("material", "").strip()
             product.style        = request.form.get("style", "casual")
             product.is_featured  = request.form.get("is_featured") == "on"
-            product.stock        = int(request.form.get("stock", 50))
+
+            input_stock = int(request.form.get("stock", 50))
+            sold = db.session.query(db.func.sum(OrderItem.quantity)).join(Order).filter(
+                OrderItem.product_id == product.id,
+                Order.status == 'delivered'
+            ).scalar() or 0
+            product.stock = input_stock + sold
+
             db.session.commit()
             recommendation_engine.invalidate_cache()
             flash(f'Đã cập nhật sản phẩm "{product.name}".', "success")
