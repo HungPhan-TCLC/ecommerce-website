@@ -23,12 +23,13 @@ VNPAY_URL        = os.environ.get("VNPAY_URL", "https://sandbox.vnpayment.vn/pay
 VNPAY_RETURN_URL = os.environ.get("VNPAY_RETURN_URL", "http://localhost:5000/payment/vnpay/return")
 
 
-def vnpay_create_payment_url(order_id, amount, order_info, client_ip):
+def vnpay_create_payment_url(order_id, amount, order_info, client_ip, return_url=None):
     """
     Tạo URL thanh toán VNPay.
     amount: số tiền VND (VNPay nhân x100 → truyền amount*100)
     Trả về URL redirect sang cổng VNPay.
     """
+    if return_url is None: return_url = VNPAY_RETURN_URL
     vnp_params = {
         "vnp_Version":    "2.1.0",
         "vnp_Command":    "pay",
@@ -39,7 +40,7 @@ def vnpay_create_payment_url(order_id, amount, order_info, client_ip):
         "vnp_OrderInfo":  order_info,
         "vnp_OrderType":  "other",
         "vnp_Locale":     "vn",
-        "vnp_ReturnUrl":  VNPAY_RETURN_URL,
+        "vnp_ReturnUrl":  return_url,
         "vnp_IpAddr":     client_ip,
         "vnp_CreateDate": datetime.now().strftime("%Y%m%d%H%M%S"),
     }
@@ -121,11 +122,14 @@ MOMO_RETURN_URL   = os.environ.get("MOMO_RETURN_URL",   "http://localhost:5000/p
 MOMO_NOTIFY_URL   = os.environ.get("MOMO_NOTIFY_URL",   "http://localhost:5000/payment/momo/notify")
 
 
-def momo_create_payment(order_id, amount, order_info):
+def momo_create_payment(order_id, amount, order_info, return_url=None, notify_url=None):
     """
     Tạo request thanh toán MoMo.
     Trả về (pay_url: str | None, message: str)
     """
+    if return_url is None: return_url = MOMO_RETURN_URL
+    if notify_url is None: notify_url = MOMO_NOTIFY_URL
+    
     request_id   = str(uuid.uuid4())
     order_id_str = f"LUXE{order_id}"
     extra_data   = ""
@@ -136,11 +140,11 @@ def momo_create_payment(order_id, amount, order_info):
         f"accessKey={MOMO_ACCESS_KEY}"
         f"&amount={int(amount)}"
         f"&extraData={extra_data}"
-        f"&ipnUrl={MOMO_NOTIFY_URL}"
+        f"&ipnUrl={notify_url}"
         f"&orderId={order_id_str}"
         f"&orderInfo={order_info}"
         f"&partnerCode={MOMO_PARTNER_CODE}"
-        f"&redirectUrl={MOMO_RETURN_URL}"
+        f"&redirectUrl={return_url}"
         f"&requestId={request_id}"
         f"&requestType={request_type}"
     )
@@ -158,8 +162,8 @@ def momo_create_payment(order_id, amount, order_info):
         "amount":      str(int(amount)),
         "orderId":     order_id_str,
         "orderInfo":   order_info,
-        "redirectUrl": MOMO_RETURN_URL,
-        "ipnUrl":      MOMO_NOTIFY_URL,
+        "redirectUrl": return_url,
+        "ipnUrl":      notify_url,
         "extraData":   extra_data,
         "requestType": request_type,
         "signature":   signature,

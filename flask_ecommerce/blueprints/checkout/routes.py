@@ -216,11 +216,13 @@ def vnpay_create():
     session.pop("selected_cart_items", None)
 
     client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    vnpay_return_url = url_for("checkout.vnpay_return", _external=True)
     payment_url = vnpay_create_payment_url(
         order_id=order.id,
         amount=total,
         order_info=f"Thanh toan don hang LUXE #{order.id}",
         client_ip=client_ip,
+        return_url=vnpay_return_url,
     )
     return redirect(payment_url)
 
@@ -341,10 +343,14 @@ def momo_create():
     session["momo_order_id"] = order.id
     session.pop("selected_cart_items", None)
 
+    momo_return_url = url_for("checkout.momo_return", _external=True)
+    momo_notify_url = url_for("checkout.momo_notify", _external=True)
     pay_url, message = momo_create_payment(
         order_id=order.id,
         amount=total,
         order_info=f"Thanh toan don hang LUXE #{order.id}",
+        return_url=momo_return_url,
+        notify_url=momo_notify_url,
     )
 
     if pay_url:
