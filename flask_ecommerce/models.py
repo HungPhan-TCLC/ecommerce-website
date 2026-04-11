@@ -57,8 +57,18 @@ class Product(db.Model):
     material = db.Column(db.String(100), nullable=True)
     style = db.Column(db.String(100), nullable=True)  # 'casual', 'formal', 'streetwear', 'sporty'
     is_featured = db.Column(db.Boolean, default=False)
-    stock = db.Column(db.Integer, default=50)
+    stock = db.Column(db.Integer, default=50) # Tồn kho tổng nhập vào
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def available_stock(self):
+        # Tính số lượng sản phẩm đã bán ra ở trạng thái 'delivered'
+        sold = db.session.query(db.func.sum(OrderItem.quantity)) \
+            .join(Order).filter(
+                OrderItem.product_id == self.id,
+                Order.status == 'delivered'
+            ).scalar() or 0
+        return max(0, self.stock - sold)
 
     # Relationships
     order_items = db.relationship('OrderItem', backref='product', lazy=True)
