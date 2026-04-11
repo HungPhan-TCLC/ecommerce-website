@@ -86,15 +86,26 @@
 
     {% if orders.pages > 1 %}
     <div class="px-5 py-4 border-t border-dark-100 flex items-center justify-between">
-        <p class="text-xs text-dark-500">Trang {{ orders.page }} / {{ orders.pages }}</p>
+        <p class="text-xs text-dark-500">
+            Hiển thị {{ ((orders.page-1)*15)+1 }}–{{ [orders.page*15, orders.total]|min }} / {{ orders.total }} đơn hàng
+        </p>
         <div class="flex gap-1">
             {% if orders.has_prev %}
             <a href="{{ url_for('admin.admin_orders', page=orders.prev_num, status=status_filter, search=search) }}"
-               class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50">Trước</a>
+               class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">&lt;</a>
             {% endif %}
+            {% for p in orders.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                {% if p %}
+                <a href="{{ url_for('admin.admin_orders', page=p, status=status_filter, search=search) }}"
+                   class="px-3 py-1.5 text-xs border rounded-lg transition-colors
+                          {% if p == orders.page %}bg-primary-600 text-white border-primary-600{% else %}border-dark-200 hover:bg-dark-50{% endif %}">{{ p }}</a>
+                {% else %}
+                <span class="px-2 py-1.5 text-xs text-dark-400">…</span>
+                {% endif %}
+            {% endfor %}
             {% if orders.has_next %}
             <a href="{{ url_for('admin.admin_orders', page=orders.next_num, status=status_filter, search=search) }}"
-               class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50">Sau</a>
+               class="px-3 py-1.5 text-xs border border-dark-200 rounded-lg hover:bg-dark-50 transition-colors">&gt;</a>
             {% endif %}
         </div>
     </div>
