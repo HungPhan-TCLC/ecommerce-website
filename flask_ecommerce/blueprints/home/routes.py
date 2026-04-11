@@ -15,8 +15,12 @@ def index():
     featured_products = Product.query.filter_by(is_featured=True).limit(8).all()
     new_products = Product.query.order_by(Product.created_at.desc()).limit(8).all()
 
+    rec_algo = "popular"  # default cho user chưa đăng nhập
     if current_user.is_authenticated:
-        personalized = recommendation_engine.get_personalized_recommendations(
+        # Dùng get_hybrid_recommendations() để có switching logic:
+        # - user mới (< CF_MIN_INTERACTIONS=3) → Content-based Filtering
+        # - user có lịch sử               → Collaborative Filtering
+        personalized, rec_algo = recommendation_engine.get_hybrid_recommendations(
             current_user.id, top_n=8
         )
     else:
@@ -27,4 +31,5 @@ def index():
         featured_products=featured_products,
         new_products=new_products,
         personalized=personalized,
+        rec_algo=rec_algo,
     )

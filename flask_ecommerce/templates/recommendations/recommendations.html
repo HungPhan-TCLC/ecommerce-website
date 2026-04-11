@@ -209,9 +209,24 @@
             <div>
                 <div class="flex items-center gap-2 mb-1">
                     <h2 class="font-display text-xl lg:text-2xl font-bold text-dark-900">Dành riêng cho {{ current_user.full_name or current_user.username }}</h2>
-                    <span class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-semibold">Collaborative Filtering</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full font-semibold
+                        {% if personalized_algo == 'collaborative_filtering' %}bg-purple-100 text-purple-600
+                        {% elif personalized_algo == 'content_based' %}bg-cyan-100 text-cyan-600
+                        {% else %}bg-emerald-100 text-emerald-600{% endif %}">
+                        {% if personalized_algo == 'collaborative_filtering' %}Collaborative Filtering
+                        {% elif personalized_algo == 'content_based' %}Content-based Filtering
+                        {% else %}Weighted Hybrid{% endif %}
+                    </span>
                 </div>
-                <p class="text-dark-400 text-sm">Gợi ý dựa trên hành vi mua sắm của bạn và những người có sở thích tương tự. Hệ thống phân tích {{ user_stats.total_interactions }} lượt tương tác của bạn để cá nhân hóa.</p>
+                <p class="text-dark-400 text-sm">
+                    {% if personalized_algo == 'collaborative_filtering' %}
+                        Gợi ý dựa trên hành vi mua sắm của bạn và những người có sở thích tương tự. Hệ thống phân tích {{ user_stats.total_interactions }} lượt tương tác của bạn để cá nhân hóa.
+                    {% elif personalized_algo == 'content_based' %}
+                        Bạn còn mới — hệ thống đang dùng <b>Content-based Filtering</b>: phân tích nội dung sản phẩm bạn đã xem (TF-IDF + Cosine Similarity) để gợi ý phù hợp.
+                    {% else %}
+                        Hệ thống kết hợp thông minh: <b>CF × 0.5 + Content-based × 0.3 + Popular × 0.2</b> để cá nhân hóa tối ưu.
+                    {% endif %}
+                </p>
             </div>
         </div>
         {% if personalized %}
