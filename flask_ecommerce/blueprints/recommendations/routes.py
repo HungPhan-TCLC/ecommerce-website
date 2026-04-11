@@ -20,11 +20,15 @@ def recommendations():
     }
 
     personalized = []
+    personalized_algo = "popular"  # default cho user chưa đăng nhập
     user_stats = {"views": 0, "carts": 0, "purchases": 0, "total_interactions": 0}
     rated_products = []
 
     if current_user.is_authenticated:
-        personalized = recommendation_engine.get_personalized_recommendations(
+        # Dùng get_hybrid_recommendations() để có switching logic:
+        # - user mới (<3 interactions) → Content-based
+        # - user có lịch sử           → Collaborative Filtering
+        personalized, personalized_algo = recommendation_engine.get_hybrid_recommendations(
             current_user.id, top_n=8
         )
         user_stats["views"] = UserInteraction.query.filter_by(
@@ -60,17 +64,16 @@ def recommendations():
 
     popular = recommendation_engine._get_popular_products(top_n=8)
 
-    hybrid_products = []
-    hybrid_algo = "popular"
-    if current_user.is_authenticated:
-        hybrid_products, hybrid_algo = recommendation_engine.get_hybrid_recommendations(
-            current_user.id, top_n=8
-        )
+    # Hybrid section dùng lại dữ liệu đã tính từ get_hybrid_recommendations() ở trên
+    # để tránh tính 2 lần
+    hybrid_products = personalized
+    hybrid_algo = personalized_algo
 
     return render_template(
         "recommendations/recommendations.html",
         stats=stats,
         personalized=personalized,
+        personalized_algo=personalized_algo,
         user_stats=user_stats,
         rated_products=rated_products,
         sample_product=sample_product,

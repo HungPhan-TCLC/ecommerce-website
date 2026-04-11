@@ -16,7 +16,8 @@ VALID_SOURCES = {"recommendation", "search", "category", "homepage", "direct"}
 @product_bp.route("/category/<slug>")
 def category_products(slug):
     category = Category.query.filter_by(slug=slug).first_or_404()
-    products = Product.query.filter_by(category_id=category.id).all()
+    page = request.args.get("page", 1, type=int)
+    products = Product.query.filter_by(category_id=category.id).paginate(page=page, per_page=32, error_out=False)
     return render_template("product/category.html", category=category, products=products)
 
 

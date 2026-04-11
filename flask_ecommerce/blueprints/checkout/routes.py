@@ -34,9 +34,21 @@ def checkout():
             flash("Vui lòng điền đầy đủ thông tin giao hàng.", "error")
             return render_template("checkout/checkout.html", cart_items=cart_items, total=total)
 
+        # Use only selected items if stored in session
+        selected_ids = session.get("selected_cart_items")
+        if selected_ids:
+            items_to_order = [i for i in cart_items if i.id in selected_ids]
+        else:
+            items_to_order = cart_items
+
+        if not items_to_order:
+            flash("Vui lòng chọn ít nhất một sản phẩm.", "warning")
+            return redirect(url_for("cart.cart"))
+
+        order_total = sum(i.product.price * i.quantity for i in items_to_order)
         order = Order(
             user_id=current_user.id,
-            total_amount=total,
+            total_amount=order_total,
             status="confirmed",
             full_name=full_name,
             phone=phone,
@@ -46,7 +58,7 @@ def checkout():
         db.session.add(order)
         db.session.flush()
 
-        for cart_item in cart_items:
+        for cart_item in items_to_order:
             order_item = OrderItem(
                 order_id=order.id,
                 product_id=cart_item.product_id,
@@ -65,6 +77,7 @@ def checkout():
 
         db.session.commit()
         recommendation_engine.invalidate_cache()
+        session.pop("selected_cart_items", None)
 
         flash("Đặt hàng thành công! Cảm ơn bạn đã mua sắm.", "success")
         return render_template("checkout/success.html", order=order)
@@ -75,21 +88,42 @@ def checkout():
 @checkout_bp.route("/checkout/payment", methods=["GET", "POST"])
 @login_required
 def checkout_payment():
-    cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
-    if not cart_items:
+    all_cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
+    if not all_cart_items:
         flash("Giỏ hàng trống!", "warning")
         return redirect(url_for("cart.cart"))
 
-    total = sum(item.product.price * item.quantity for item in cart_items)
-
     if request.method == "POST":
+        # Step 1: cart page submits selected_items + shipping info together
+        selected_ids_raw = request.form.getlist("selected_items")
+        if selected_ids_raw:
+            # Coming from cart — save selection then show shipping form
+            selected_ids = [int(x) for x in selected_ids_raw if x.isdigit()]
+            if not selected_ids:
+                flash("Vui lòng chọn ít nhất một sản phẩm.", "warning")
+                return redirect(url_for("cart.cart"))
+            session["selected_cart_items"] = selected_ids
+
+        # Resolve which items to show
+        selected_ids = session.get("selected_cart_items")
+        if selected_ids:
+            cart_items = [i for i in all_cart_items if i.id in selected_ids]
+        else:
+            cart_items = all_cart_items
+
+        if not cart_items:
+            flash("Không tìm thấy sản phẩm đã chọn. Vui lòng thử lại.", "warning")
+            return redirect(url_for("cart.cart"))
+
+        total = sum(item.product.price * item.quantity for item in cart_items)
+
         full_name = request.form.get("full_name", "").strip()
         phone     = request.form.get("phone", "").strip()
         address   = request.form.get("address", "").strip()
         note      = request.form.get("note", "").strip()
 
         if not full_name or not phone or not address:
-            flash("Vui lòng điền đầy đủ thông tin giao hàng.", "error")
+            # Show shipping form (either first visit from cart or missing fields)
             return render_template("checkout/payment.html", cart_items=cart_items, total=total)
 
         session["pending_order"] = {
@@ -106,6 +140,14 @@ def checkout_payment():
             shipping_info=session["pending_order"],
         )
 
+    # GET — show shipping form using previously selected items
+    selected_ids = session.get("selected_cart_items")
+    if selected_ids:
+        cart_items = [i for i in all_cart_items if i.id in selected_ids]
+    else:
+        cart_items = all_cart_items
+
+    total = sum(item.product.price * item.quantity for item in cart_items)
     return render_template("checkout/payment.html", cart_items=cart_items, total=total)
 
 
@@ -119,9 +161,16 @@ def vnpay_create():
         flash("Phiên đặt hàng đã hết hạn, vui lòng thử lại.", "warning")
         return redirect(url_for("checkout.checkout_payment"))
 
-    cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
-    if not cart_items:
+    all_cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
+    if not all_cart_items:
         flash("Giỏ hàng trống!", "warning")
+        return redirect(url_for("cart.cart"))
+
+    # Filter to selected items
+    selected_ids = session.get("selected_cart_items")
+    cart_items = [i for i in all_cart_items if i.id in selected_ids] if selected_ids else all_cart_items
+    if not cart_items:
+        flash("Không tìm thấy sản phẩm đã chọn. Vui lòng thử lại.", "warning")
         return redirect(url_for("cart.cart"))
 
     total = sum(item.product.price * item.quantity for item in cart_items)
@@ -160,17 +209,20 @@ def vnpay_create():
             quantity=item.quantity,
             price=item.product.price,
         ))
+        db.session.delete(item)  # only delete selected items
 
-    CartItem.query.filter_by(user_id=current_user.id).delete()
     db.session.commit()
     session["vnpay_order_id"] = order.id
+    session.pop("selected_cart_items", None)
 
     client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    vnpay_return_url = url_for("checkout.vnpay_return", _external=True)
     payment_url = vnpay_create_payment_url(
         order_id=order.id,
         amount=total,
         order_info=f"Thanh toan don hang LUXE #{order.id}",
         client_ip=client_ip,
+        return_url=vnpay_return_url,
     )
     return redirect(payment_url)
 
@@ -237,9 +289,16 @@ def momo_create():
         flash("Phiên đặt hàng đã hết hạn, vui lòng thử lại.", "warning")
         return redirect(url_for("checkout.checkout_payment"))
 
-    cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
-    if not cart_items:
+    all_cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
+    if not all_cart_items:
         flash("Giỏ hàng trống!", "warning")
+        return redirect(url_for("cart.cart"))
+
+    # Filter to selected items
+    selected_ids = session.get("selected_cart_items")
+    cart_items = [i for i in all_cart_items if i.id in selected_ids] if selected_ids else all_cart_items
+    if not cart_items:
+        flash("Không tìm thấy sản phẩm đã chọn. Vui lòng thử lại.", "warning")
         return redirect(url_for("cart.cart"))
 
     total = sum(item.product.price * item.quantity for item in cart_items)
@@ -278,15 +337,20 @@ def momo_create():
             quantity=item.quantity,
             price=item.product.price,
         ))
+        db.session.delete(item)  # only delete selected items
 
-    CartItem.query.filter_by(user_id=current_user.id).delete()
     db.session.commit()
     session["momo_order_id"] = order.id
+    session.pop("selected_cart_items", None)
 
+    momo_return_url = url_for("checkout.momo_return", _external=True)
+    momo_notify_url = url_for("checkout.momo_notify", _external=True)
     pay_url, message = momo_create_payment(
         order_id=order.id,
         amount=total,
         order_info=f"Thanh toan don hang LUXE #{order.id}",
+        return_url=momo_return_url,
+        notify_url=momo_notify_url,
     )
 
     if pay_url:

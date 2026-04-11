@@ -143,7 +143,13 @@
                     </h2>
                     <p class="text-dark-400 mt-1 text-sm">
                         {% if current_user.is_authenticated %}
-                        Collaborative Filtering phân tích hành vi của bạn → tìm users có sở thích tương tự → gợi ý sản phẩm họ thích
+                            {% if rec_algo == 'collaborative_filtering' %}
+                            Collaborative Filtering phân tích hành vi của bạn → tìm users có sở thích tương tự → gợi ý sản phẩm họ thích
+                            {% elif rec_algo == 'content_based' %}
+                            Content-based Filtering phân tích sản phẩm bạn đã xem → gợi ý sản phẩm có đặc điểm tương tự (TF-IDF + Cosine Similarity)
+                            {% else %}
+                            Hybrid: CF × 0.5 + Content-based × 0.3 + Popular × 0.2 — gợi ý tối ưu cho bạn
+                            {% endif %}
                         {% else %}
                         Sản phẩm đang được quan tâm nhiều nhất — <a href="{{ url_for('auth.login') }}" class="text-purple-600 font-medium hover:underline">Đăng nhập</a> để có trải nghiệm tốt hơn
                         {% endif %}

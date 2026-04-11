@@ -18,8 +18,29 @@
 
         <!-- Cart Items -->
         <div class="lg:col-span-2 space-y-4">
+
+            <!-- Select All Row -->
+            <div class="flex items-center gap-3 px-4 py-3 bg-dark-50 border border-dark-100 rounded-xl">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" id="select-all" class="cart-checkbox w-4 h-4 cursor-pointer" style="accent-color:#1a1a2e">
+                    <span class="text-sm font-medium text-dark-700">Chọn tất cả</span>
+                </label>
+                <span class="ml-auto text-xs text-dark-400" id="selected-count">0 / {{ cart_items | length }} đã chọn</span>
+            </div>
+
             {% for item in cart_items %}
-            <div class="flex gap-4 p-4 bg-white border border-dark-100 rounded-xl hover:shadow-md transition-shadow">
+            <div class="flex gap-3 p-4 bg-white border border-dark-100 rounded-xl hover:shadow-md transition-shadow"
+                 data-row>
+
+                <!-- Checkbox -->
+                <div class="flex items-center flex-shrink-0 pt-1">
+                    <input type="checkbox"
+                           class="item-checkbox cart-checkbox w-4 h-4 cursor-pointer"
+                           style="accent-color:#1a1a2e"
+                           data-item-id="{{ item.id }}"
+                           data-subtotal="{{ (item.product.price * item.quantity) | int }}">
+                </div>
+
                 <!-- Product Image -->
                 <a href="{{ url_for('product.product_detail', product_id=item.product.id) }}" class="flex-shrink-0">
                     <div class="w-24 h-32 sm:w-28 sm:h-36 rounded-lg overflow-hidden bg-dark-100">
@@ -28,35 +49,38 @@
                 </a>
 
                 <!-- Product Info -->
-                <div class="flex-1 flex flex-col justify-between">
+                <div class="flex-1 flex flex-col justify-between min-w-0">
                     <div>
-                        <a href="{{ url_for('product.product_detail', product_id=item.product.id) }}" class="text-sm font-medium text-dark-800 hover:text-primary-600 transition-colors line-clamp-2">
+                        <a href="{{ url_for('product.product_detail', product_id=item.product.id) }}"
+                           class="text-sm font-medium text-dark-800 hover:text-primary-600 transition-colors line-clamp-2">
                             {{ item.product.name }}
                         </a>
                         <p class="text-xs text-dark-400 mt-1">{{ item.product.category.name }} • {{ item.product.material or '' }}</p>
                     </div>
 
                     <div class="flex items-end justify-between mt-3">
-                        <!-- Quantity -->
+                        <!-- Quantity (separate form, won't affect checkout form) -->
                         <form action="{{ url_for('cart.update_cart', item_id=item.id) }}" method="POST" class="flex items-center">
                             <div class="flex items-center border border-dark-200 rounded-lg overflow-hidden">
-                                <button type="submit" name="quantity" value="{{ item.quantity - 1 }}" class="w-8 h-8 flex items-center justify-center text-dark-400 hover:bg-dark-50 text-xs">−</button>
+                                <button type="submit" name="quantity" value="{{ item.quantity - 1 }}"
+                                        class="w-8 h-8 flex items-center justify-center text-dark-400 hover:bg-dark-50 text-xs">−</button>
                                 <span class="w-10 h-8 flex items-center justify-center text-sm font-medium border-x border-dark-200">{{ item.quantity }}</span>
-                                <button type="submit" name="quantity" value="{{ item.quantity + 1 }}" class="w-8 h-8 flex items-center justify-center text-dark-400 hover:bg-dark-50 text-xs">+</button>
+                                <button type="submit" name="quantity" value="{{ item.quantity + 1 }}"
+                                        class="w-8 h-8 flex items-center justify-center text-dark-400 hover:bg-dark-50 text-xs">+</button>
                             </div>
                         </form>
 
-                        <!-- Price & Remove -->
+                        <!-- Price -->
                         <div class="text-right">
                             <p class="text-base font-bold text-dark-900">{{ (item.product.price * item.quantity) | format_price }}</p>
                             {% if item.quantity > 1 %}
-                            <p class="text-xs text-dark-400">{{ item.product.price | format_price }} x {{ item.quantity }}</p>
+                            <p class="text-xs text-dark-400">{{ item.product.price | format_price }} × {{ item.quantity }}</p>
                             {% endif %}
                         </div>
                     </div>
                 </div>
 
-                <!-- Remove Button -->
+                <!-- Remove Button (separate form) -->
                 <form action="{{ url_for('cart.remove_from_cart', item_id=item.id) }}" method="POST" class="flex-shrink-0">
                     <button type="submit" class="p-1.5 text-dark-300 hover:text-red-500 transition-colors" title="Xóa">
                         <i data-lucide="x" class="w-4 h-4"></i>
@@ -73,38 +97,44 @@
 
                 <div class="space-y-3 text-sm">
                     <div class="flex justify-between text-dark-500">
-                        <span>Tạm tính ({{ cart_items | length }} sản phẩm)</span>
-                        <span>{{ total | format_price }}</span>
+                        <span id="summary-label">Tạm tính (0 sản phẩm)</span>
+                        <span id="summary-subtotal">0₫</span>
                     </div>
                     <div class="flex justify-between text-dark-500">
                         <span>Phí vận chuyển</span>
-                        <span class="{% if total >= 500000 %}text-emerald-600 font-medium{% endif %}">
-                            {% if total >= 500000 %}Miễn phí{% else %}30.000₫{% endif %}
-                        </span>
+                        <span id="summary-shipping">—</span>
                     </div>
-                    {% if total < 500000 %}
-                    <p class="text-xs text-primary-600 bg-primary-50 px-3 py-2 rounded-lg">
-                        💡 Mua thêm {{ (500000 - total) | format_price }} để được miễn phí vận chuyển!
+                    <p id="free-shipping-hint" class="text-xs text-primary-600 bg-primary-50 px-3 py-2 rounded-lg hidden">
+                        💡 Mua thêm <span id="shipping-gap"></span> để được miễn phí vận chuyển!
                     </p>
-                    {% endif %}
                 </div>
 
                 <div class="mt-4 pt-4 border-t border-dark-200">
                     <div class="flex justify-between items-baseline">
                         <span class="font-semibold text-dark-800">Tổng cộng</span>
-                        <span class="text-xl font-bold text-dark-900">
-                            {% if total >= 500000 %}
-                            {{ total | format_price }}
-                            {% else %}
-                            {{ (total + 30000) | format_price }}
-                            {% endif %}
-                        </span>
+                        <span class="text-xl font-bold text-dark-900" id="summary-total">0₫</span>
                     </div>
                 </div>
 
-                <a href="{{ url_for('checkout.checkout_payment') }}" class="mt-6 block w-full py-3.5 bg-dark-900 text-white font-semibold rounded-xl hover:bg-primary-600 transition-all text-center shadow-lg">
-                    Tiến hành thanh toán
-                </a>
+                <!-- Warning when nothing selected -->
+                <p id="no-sel-warning" class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg text-center">
+                    ☝️ Chọn ít nhất 1 sản phẩm để tiến hành thanh toán.
+                </p>
+
+                <!-- Checkout form: posts selected_items IDs -->
+                <form id="checkout-form" action="{{ url_for('checkout.checkout_payment') }}" method="POST">
+                    <!-- Hidden checkboxes mirroring the visible ones -->
+                    {% for item in cart_items %}
+                    <input type="checkbox" name="selected_items" value="{{ item.id }}"
+                           class="hidden-mirror" id="mirror-{{ item.id }}" style="display:none" disabled>
+                    {% endfor %}
+                    <button type="submit" id="checkout-btn"
+                            class="mt-4 w-full py-3.5 bg-dark-900 text-white font-semibold rounded-xl transition-all text-center shadow-lg"
+                            style="cursor:not-allowed;opacity:0.4"
+                            disabled>
+                        Tiến hành thanh toán
+                    </button>
+                </form>
 
                 <a href="{{ url_for('home.index') }}" class="mt-3 block text-center text-sm text-dark-500 hover:text-primary-600 transition-colors">
                     ← Tiếp tục mua sắm
@@ -128,4 +158,126 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+(function () {
+    const FREE_SHIP_MIN = 500000;
+    const SHIP_FEE     = 30000;
+
+    const selectAllCb   = document.getElementById('select-all');
+    const itemCbs       = Array.from(document.querySelectorAll('.item-checkbox'));
+    const mirrors       = {};   // item_id -> hidden checkbox in form
+    document.querySelectorAll('.hidden-mirror').forEach(el => {
+        const id = el.value;
+        mirrors[id] = el;
+    });
+
+    const elLabel    = document.getElementById('summary-label');
+    const elSub      = document.getElementById('summary-subtotal');
+    const elShip     = document.getElementById('summary-shipping');
+    const elTotal    = document.getElementById('summary-total');
+    const elHint     = document.getElementById('free-shipping-hint');
+    const elGap      = document.getElementById('shipping-gap');
+    const elWarn     = document.getElementById('no-sel-warning');
+    const elBtn      = document.getElementById('checkout-btn');
+    const elSelCnt   = document.getElementById('selected-count');
+
+    function fmt(v) {
+        return v.toLocaleString('vi-VN') + '₫';
+    }
+
+    function recalc() {
+        let subtotal = 0;
+        let count = 0;
+
+        itemCbs.forEach(cb => {
+            const itemId = cb.dataset.itemId;
+            const price  = parseInt(cb.dataset.subtotal, 10) || 0;
+
+            if (cb.checked) {
+                subtotal += price;
+                count++;
+                // Enable the mirror checkbox so it gets submitted
+                if (mirrors[itemId]) {
+                    mirrors[itemId].disabled = false;
+                    mirrors[itemId].checked  = true;
+                }
+            } else {
+                if (mirrors[itemId]) {
+                    mirrors[itemId].disabled = true;
+                    mirrors[itemId].checked  = false;
+                }
+            }
+        });
+
+        // Shipping
+        let shipping = 0;
+        if (count > 0) {
+            shipping = subtotal >= FREE_SHIP_MIN ? 0 : SHIP_FEE;
+        }
+        const total = subtotal + shipping;
+
+        // Update DOM
+        elLabel.textContent = `Tạm tính (${count} sản phẩm)`;
+        elSub.textContent   = fmt(subtotal);
+        elTotal.textContent = fmt(total);
+        elSelCnt.textContent = `${count} / ${itemCbs.length} đã chọn`;
+
+        if (count === 0) {
+            elShip.textContent = '—';
+            elShip.className   = '';
+            elHint.classList.add('hidden');
+        } else if (subtotal >= FREE_SHIP_MIN) {
+            elShip.textContent = 'Miễn phí';
+            elShip.className   = 'text-emerald-600 font-medium';
+            elHint.classList.add('hidden');
+        } else {
+            elShip.textContent = fmt(SHIP_FEE);
+            elShip.className   = '';
+            elGap.textContent  = fmt(FREE_SHIP_MIN - subtotal);
+            elHint.classList.remove('hidden');
+        }
+
+        // Checkout button enable/disable
+        const hasItems = count > 0;
+        elBtn.disabled = !hasItems;
+        elBtn.style.cursor  = hasItems ? 'pointer' : 'not-allowed';
+        elBtn.style.opacity = hasItems ? '1' : '0.4';
+        elWarn.style.display = hasItems ? 'none' : '';
+
+        // Sync select-all state
+        if (count === 0) {
+            selectAllCb.indeterminate = false;
+            selectAllCb.checked = false;
+        } else if (count === itemCbs.length) {
+            selectAllCb.indeterminate = false;
+            selectAllCb.checked = true;
+        } else {
+            selectAllCb.indeterminate = true;
+        }
+    }
+
+    // Wiring
+    selectAllCb.addEventListener('change', function () {
+        itemCbs.forEach(cb => { cb.checked = this.checked; });
+        recalc();
+    });
+
+    itemCbs.forEach(cb => cb.addEventListener('change', recalc));
+
+    // Click on item row (outside interactive elements) toggles checkbox
+    document.querySelectorAll('[data-row]').forEach(row => {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function (e) {
+            if (e.target.closest('a, button, form, input, label')) return;
+            const cb = row.querySelector('.item-checkbox');
+            cb.checked = !cb.checked;
+            recalc();
+        });
+    });
+
+    // Initial state: no items selected
+    recalc();
+})();
+</script>
 {% endblock %}
