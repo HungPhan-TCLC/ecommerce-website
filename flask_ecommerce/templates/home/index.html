@@ -70,6 +70,7 @@
                 Xem tất cả <i data-lucide="arrow-right" class="w-4 h-4"></i>
             </a>
         </div>
+        {% set rec_reasons = {} %}
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
             {% for product in featured_products %}
             {% include 'common/_product_card.html' %}
@@ -163,6 +164,7 @@
             -->
         </div>
 
+        {% set rec_reasons = personalized_reasons %}
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
             {% for product in personalized %}
             {% include 'common/_product_card.html' %}
@@ -190,6 +192,7 @@
                 <p class="text-dark-400 mt-1">Cập nhật xu hướng mới nhất</p>
             </div>
         </div>
+        {% set rec_reasons = {} %}
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
             {% for product in new_products %}
             {% include 'common/_product_card.html' %}

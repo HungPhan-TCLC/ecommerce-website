@@ -26,10 +26,21 @@ def index():
     else:
         personalized = recommendation_engine._get_popular_products(top_n=8)
 
+    # Tính lý do gợi ý cho từng sản phẩm personalized
+    rec_reasons = {}
+    if personalized:
+        uid = current_user.id if current_user.is_authenticated else 0
+        rec_reasons = recommendation_engine.get_recommendation_reasons(
+            user_id=uid,
+            product_ids=[p.id for p in personalized],
+            algorithm=rec_algo,
+        )
+
     return render_template(
         "home/index.html",
         featured_products=featured_products,
         new_products=new_products,
         personalized=personalized,
         rec_algo=rec_algo,
+        personalized_reasons=rec_reasons,
     )

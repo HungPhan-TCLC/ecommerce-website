@@ -1,5 +1,6 @@
 <!-- _product_card.html - Component card sản phẩm dùng chung -->
-<div class="product-card group">
+{% set _reason = rec_reasons[product.id] if rec_reasons is defined and product.id in rec_reasons else None %}
+<div class="product-card group relative">
     <a href="{{ url_for('product.product_detail', product_id=product.id) }}{% if source_tag is defined and source_tag %}?source={{ source_tag }}{% endif %}" class="block">
         <!-- Image -->
         <div class="relative aspect-[3/4] rounded-xl overflow-hidden bg-dark-100 mb-3">
@@ -46,4 +47,28 @@
             </div>
         </div>
     </a>
+
+    <!-- "Vì sao?" button — chỉ hiển thị khi có lý do gợi ý -->
+    {% if _reason %}
+    <button
+        type="button"
+        class="rec-why-btn mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium transition-all duration-200
+            {% if _reason.color == 'purple' %}bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200
+            {% elif _reason.color == 'cyan' %}bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border border-cyan-200
+            {% elif _reason.color == 'emerald' %}bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200
+            {% else %}bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200{% endif %}"
+        data-rec-headline="{{ _reason.headline | e }}"
+        data-rec-detail="{{ _reason.detail | e }}"
+        data-rec-algorithm="{{ _reason.algorithm | e }}"
+        data-rec-algorithm-key="{{ _reason.algorithm_key }}"
+        data-rec-signals="{{ _reason.signals | join('||') | e }}"
+        data-rec-color="{{ _reason.color }}"
+        data-rec-icon="{{ _reason.icon }}"
+        data-rec-product="{{ product.name | e }}"
+        onclick="openRecWhyModal(this)"
+    >
+        <i data-lucide="sparkles" class="w-3 h-3"></i>
+        Vì sao gợi ý?
+    </button>
+    {% endif %}
 </div>

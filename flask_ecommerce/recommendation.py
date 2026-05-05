@@ -128,37 +128,134 @@ class RecommendationEngine:
     #  Gợi ý dựa trên hành vi của các user tương tự
     # ========================================================
 
+    def _compute_user_adaptive_weights(self, interactions_df):
+        """
+        Step 1 — Tính adaptive weight cho từng interaction type theo hành vi cá nhân.
+
+        Weights phản ánh conversion rate thực tế của user, KHÔNG dùng thông tin
+        chéo giữa các type để tránh double counting / leakage:
+
+            n_view, n_cart, n_purchase = số lần thực hiện mỗi loại
+            n_total = n_view + n_cart + n_purchase
+
+            purchase_rate = n_purchase / n_total   ∈ [0, 1]
+            cart_rate     = n_cart     / n_total   ∈ [0, 1]
+
+            view_weight     = 1 × (1 + purchase_rate)   → [1.0 .. 2.0]
+            cart_weight     = 3 × (1 + cart_rate)        → [3.0 .. 6.0]
+            purchase_weight = 5 × (1 + purchase_rate)   → [5.0 .. 10.0]
+
+        Tại sao purchase_weight cũng thay đổi?
+        - User A: n_view=200, n_purchase=2  → purchase_rate=0.01 → purchase_weight≈5.1
+          (purchase vẫn mạnh nhưng không quá đặc biệt với user này)
+        - User B: n_view=10,  n_purchase=8  → purchase_rate=0.44 → purchase_weight≈7.2
+          (user quyết đoán, purchase là tín hiệu rất đáng tin)
+
+        Returns:
+            dict { user_id: {"view": float, "cart": float, "purchase": float} }
+        """
+        user_weights = {}
+
+        for user_id, group in interactions_df.groupby("user_id"):
+            counts  = group["interaction_type"].value_counts()
+            n_total = max(len(group), 1)  # tránh chia 0
+
+            purchase_rate = counts.get("purchase", 0) / n_total
+            cart_rate     = counts.get("cart",     0) / n_total
+
+            user_weights[user_id] = {
+                "view":     1.0 * (1 + purchase_rate),
+                "cart":     3.0 * (1 + cart_rate),
+                "purchase": 5.0 * (1 + purchase_rate),
+            }
+
+        return user_weights
+
     def _build_user_item_matrix(self):
         """
-        Xây dựng User-Item interaction matrix.
-        Giá trị = rating score dựa trên interaction type:
-        - view = 1 điểm
-        - cart = 3 điểm
-        - purchase = 5 điểm
-        Nếu có rating thực tế thì dùng rating đó.
+        Xây dựng User-Item interaction matrix theo 4 bước:
+
+        Step 1 — Adaptive weights (xem _compute_user_adaptive_weights)
+        Step 2 — Frequency-based scoring (tích lũy theo số lần tương tác)
+            score(user, product) = view_w × n_views
+                                 + cart_w × n_carts
+                                 + purchase_w × n_purchases
+            → Giữ lại toàn bộ thông tin: view 10 lần rồi mua khác hẳn view 1 lần rồi mua
+        Step 3 — Normalize per user
+            score_norm = score / max_score_của_user → [0..1]
+            → Tránh bias user có lịch sử dài hơn (nhiều interaction hơn)
+            → Sau đó scale lên [0..5] để khớp với explicit rating
+        Step 4 — Dynamic threshold (trong get_personalized_recommendations)
+            threshold = mean(scores của user đó) → ngưỡng "thích" thực sự
+
+        Nếu có explicit rating thì dùng trực tiếp, bỏ qua 4 bước trên cho row đó.
         """
         interactions = UserInteraction.query.all()
         if not interactions:
-            return None, None, None
+            return None, None
 
-        # Chuyển thành DataFrame
-        data = []
-        for inter in interactions:
-            # Tính score dựa trên loại interaction
-            type_scores = {"view": 1.0, "cart": 3.0, "purchase": 5.0}
-            score = inter.rating if inter.rating else type_scores.get(inter.interaction_type, 1.0)
-            data.append({
-                "user_id": inter.user_id,
-                "product_id": inter.product_id,
-                "score": score,
+        # Build raw DataFrame
+        raw_data = [
+            {
+                "user_id":          inter.user_id,
+                "product_id":       inter.product_id,
+                "interaction_type": inter.interaction_type,
+                "rating":           inter.rating,
+            }
+            for inter in interactions
+        ]
+        raw_df = pd.DataFrame(raw_data)
+
+        # Step 1: Adaptive weights per user
+        user_weights = self._compute_user_adaptive_weights(raw_df)
+
+        # Step 2: Frequency-based scoring — đếm số lần mỗi (user, product, type)
+        # rồi nhân với weight tương ứng và cộng dồn
+        freq_df = (
+            raw_df[raw_df["rating"].isna()]          # chỉ implicit interactions
+            .groupby(["user_id", "product_id", "interaction_type"])
+            .size()
+            .reset_index(name="n_interactions")
+        )
+
+        scored_rows = []
+        for _, row in freq_df.iterrows():
+            w = user_weights.get(
+                row["user_id"],
+                {"view": 1.0, "cart": 3.0, "purchase": 5.0},
+            )
+            scored_rows.append({
+                "user_id":    row["user_id"],
+                "product_id": row["product_id"],
+                "score":      w.get(row["interaction_type"], 1.0) * row["n_interactions"],
             })
 
-        df = pd.DataFrame(data)
+        implicit_df = (
+            pd.DataFrame(scored_rows)
+            .groupby(["user_id", "product_id"])["score"]
+            .sum()                                   # cộng dồn view + cart + purchase
+            .reset_index()
+        )
 
-        # Nếu user có nhiều interaction với cùng product, lấy score cao nhất
+        # Explicit ratings: dùng trực tiếp, scale về [0..5]
+        explicit_df = (
+            raw_df[raw_df["rating"].notna()]
+            .assign(score=lambda d: d["rating"].astype(float))
+            [["user_id", "product_id", "score"]]
+            .groupby(["user_id", "product_id"])["score"]
+            .mean()
+            .reset_index()
+        )
+
+        # Gộp implicit + explicit; explicit thắng khi cùng (user, product)
+        df = pd.concat([implicit_df, explicit_df], ignore_index=True)
         df = df.groupby(["user_id", "product_id"])["score"].max().reset_index()
 
-        # Tạo User-Item matrix (pivot table)
+        # Step 3: Normalize per user → [0..5]
+        user_max = df.groupby("user_id")["score"].transform("max")
+        df["score"] = (df["score"] / user_max.replace(0, 1)) * 5.0
+
+        # Build pivot matrix
         user_item_matrix = df.pivot_table(
             index="user_id",
             columns="product_id",
@@ -215,9 +312,12 @@ class RecommendationEngine:
             if similarity <= 0:
                 continue
 
-            # Sản phẩm user khác đã tương tác (có score cao)
+            # Sản phẩm user khác đã tương tác (có score cao hơn trung bình của họ)
+            # Dùng ngưỡng động thay vì hard-code 3.0, vì adaptive score có range [1.0 .. 6.0]
             other_user_items = user_item_matrix.loc[other_user_id]
-            other_liked = other_user_items[other_user_items >= 3.0].index.tolist()
+            nonzero_scores = other_user_items[other_user_items > 0]
+            dynamic_threshold = nonzero_scores.mean() if len(nonzero_scores) > 0 else 3.0
+            other_liked = other_user_items[other_user_items >= dynamic_threshold].index.tolist()
 
             for product_id in other_liked:
                 if product_id not in user_interacted:
@@ -450,7 +550,9 @@ class RecommendationEngine:
             if similarity <= 0:
                 continue
             other_items = user_item_matrix.loc[other_id]
-            for pid, score in other_items[other_items >= 3.0].items():
+            nonzero = other_items[other_items > 0]
+            dynamic_threshold = nonzero.mean() if len(nonzero) > 0 else 3.0
+            for pid, score in other_items[other_items >= dynamic_threshold].items():
                 if pid not in user_interacted and pid not in exclude_ids:
                     cf_scores[pid] = cf_scores.get(pid, 0) + similarity * score
 
@@ -536,6 +638,197 @@ class RecommendationEngine:
         order    = {pid: i for i, pid in enumerate(product_ids)}
         products.sort(key=lambda p: order.get(p.id, 999))
         return products
+
+    def get_recommendation_reasons(self, user_id, product_ids, algorithm):
+        """
+        Tạo lý do giải thích vì sao mỗi sản phẩm được gợi ý cho user.
+
+        Args:
+            user_id:     ID của user hiện tại
+            product_ids: Danh sách ID sản phẩm đã được gợi ý
+            algorithm:   Thuật toán đã dùng ('collaborative_filtering',
+                         'content_based', 'weighted_hybrid', 'popular')
+
+        Returns:
+            dict { product_id: {
+                "algorithm":     str,   # tên thuật toán hiển thị
+                "algorithm_key": str,   # key nội bộ
+                "headline":      str,   # tiêu đề ngắn
+                "detail":        str,   # giải thích chi tiết
+                "signals":       list[str],  # các tín hiệu cụ thể
+                "color":         str,   # màu theme (css class fragment)
+                "icon":          str,   # lucide icon name
+            } }
+        """
+        reasons = {}
+        if not product_ids:
+            return reasons
+
+        # Lấy thông tin tương tác của user
+        interacted = UserInteraction.query.filter_by(user_id=user_id).all()
+        viewed_ids    = {i.product_id for i in interacted if i.interaction_type == "view"}
+        cart_ids      = {i.product_id for i in interacted if i.interaction_type == "cart"}
+        purchased_ids = {i.product_id for i in interacted if i.interaction_type == "purchase"}
+        interacted_ids = list({i.product_id for i in interacted})
+
+        # Lấy thông tin sản phẩm đã tương tác để giải thích content-based
+        interacted_products = Product.query.filter(
+            Product.id.in_(interacted_ids)
+        ).all() if interacted_ids else []
+
+        # Đếm tương tác theo loại interaction
+        n_views     = len(viewed_ids)
+        n_carts     = len(cart_ids)
+        n_purchases = len(purchased_ids)
+        n_total     = n_views + n_carts + n_purchases
+
+        for pid in product_ids:
+            product = Product.query.get(pid)
+            if not product:
+                continue
+
+            if algorithm == "collaborative_filtering":
+                signals = []
+                if n_purchases > 0:
+                    signals.append(f"Bạn đã mua {n_purchases} sản phẩm trước đó")
+                if n_carts > 0:
+                    signals.append(f"Bạn đã thêm {n_carts} sản phẩm vào giỏ")
+                if n_views > 0:
+                    signals.append(f"Bạn đã xem {n_views} sản phẩm")
+
+                # Tìm sản phẩm chung category
+                similar_bought = [
+                    p for p in interacted_products
+                    if p.category_id == product.category_id and p.id != pid
+                ]
+                if similar_bought:
+                    signals.append(
+                        f"Phù hợp với sở thích danh mục '{product.category.name}' của bạn"
+                    )
+
+                reasons[pid] = {
+                    "algorithm":     "Collaborative Filtering",
+                    "algorithm_key": "collaborative_filtering",
+                    "headline":      "Người dùng có sở thích tương tự bạn đã yêu thích sản phẩm này",
+                    "detail":        (
+                        f"Hệ thống phân tích {n_total} lượt tương tác của bạn, "
+                        "xây dựng User-Item Matrix và tính Cosine Similarity để tìm "
+                        "những người dùng có hành vi mua sắm giống bạn nhất. "
+                        "Sản phẩm này được những người dùng đó yêu thích."
+                    ),
+                    "signals": signals or ["Dựa trên hành vi mua sắm của cộng đồng"],
+                    "color":   "purple",
+                    "icon":    "users",
+                }
+
+            elif algorithm == "content_based":
+                signals = []
+
+                # Tìm sản phẩm đã tương tác có cùng category/tags
+                same_cat = [
+                    p for p in interacted_products
+                    if p.category_id == product.category_id
+                ]
+                if same_cat:
+                    names = ", ".join(p.name for p in same_cat[:2])
+                    signals.append(f"Cùng danh mục với sản phẩm bạn đã xem: {names}")
+
+                if product.tags and interacted_products:
+                    # Kiểm tra overlap tags
+                    product_tags = set(product.tags.lower().split())
+                    for ip in interacted_products[:5]:
+                        if ip.tags:
+                            common = product_tags & set(ip.tags.lower().split())
+                            if common:
+                                signals.append(
+                                    f"Có cùng đặc điểm '{', '.join(list(common)[:3])}' "
+                                    f"với '{ip.name}'"
+                                )
+                                break
+
+                if product.style and any(
+                    p.style == product.style for p in interacted_products
+                ):
+                    signals.append(f"Phong cách '{product.style}' phù hợp với sở thích của bạn")
+
+                if product.gender and any(
+                    p.gender == product.gender for p in interacted_products
+                ):
+                    signals.append(f"Phù hợp với giới tính trong hồ sơ sở thích")
+
+                if not signals:
+                    signals.append("Nội dung tương đồng với sản phẩm bạn đã khám phá")
+
+                reasons[pid] = {
+                    "algorithm":     "Content-based Filtering",
+                    "algorithm_key": "content_based",
+                    "headline":      "Nội dung sản phẩm tương đồng với những gì bạn đã xem",
+                    "detail":        (
+                        "Hệ thống dùng TF-IDF Vectorization để chuyển đổi tags, mô tả, "
+                        "chất liệu và phong cách thành vector số, sau đó tính Cosine Similarity "
+                        "để tìm sản phẩm có đặc điểm gần nhất với profile sở thích của bạn."
+                    ),
+                    "signals": signals,
+                    "color":   "cyan",
+                    "icon":    "file-text",
+                }
+
+            elif algorithm == "weighted_hybrid":
+                signals = [
+                    f"CF × 0.5: Sở thích của {n_total} cộng đồng người dùng tương tự",
+                    "Content × 0.3: Đặc điểm sản phẩm phù hợp với hồ sơ của bạn",
+                    "Popular × 0.2: Sản phẩm được nhiều người quan tâm",
+                ]
+                if product.category:
+                    signals.append(f"Danh mục: {product.category.name}")
+
+                reasons[pid] = {
+                    "algorithm":     "Weighted Hybrid",
+                    "algorithm_key": "weighted_hybrid",
+                    "headline":      "Kết hợp từ nhiều nguồn tín hiệu để gợi ý tối ưu",
+                    "detail":        (
+                        "Hệ thống Hybrid kết hợp 3 nguồn: Collaborative Filtering (trọng số 0.5), "
+                        "Content-based Filtering (0.3) và độ phổ biến (0.2). "
+                        "Đây là phương án bổ sung khi một thuật toán đơn lẻ không đủ kết quả."
+                    ),
+                    "signals": signals,
+                    "color":   "emerald",
+                    "icon":    "layers",
+                }
+
+            else:  # popular / fallback
+                from sqlalchemy import func
+                interaction_count = db.session.query(
+                    func.count(UserInteraction.id)
+                ).filter(
+                    UserInteraction.product_id == pid
+                ).scalar() or 0
+
+                signals = []
+                if interaction_count > 0:
+                    signals.append(f"Có {interaction_count} lượt tương tác từ cộng đồng")
+                if product.is_featured:
+                    signals.append("Sản phẩm nổi bật được chọn lọc bởi đội ngũ")
+                if product.category:
+                    signals.append(f"Danh mục: {product.category.name}")
+                if not signals:
+                    signals.append("Sản phẩm phổ biến trên nền tảng")
+
+                reasons[pid] = {
+                    "algorithm":     "Trending / Popular",
+                    "algorithm_key": "popular",
+                    "headline":      "Sản phẩm đang được cộng đồng quan tâm nhiều nhất",
+                    "detail":        (
+                        "Xếp hạng dựa trên tổng số lượt tương tác (xem + thêm giỏ hàng + mua) "
+                        "của toàn bộ người dùng. Đây là fallback khi chưa có đủ dữ liệu "
+                        "cá nhân hóa hoặc bổ sung cho các thuật toán chính."
+                    ),
+                    "signals": signals,
+                    "color":   "amber",
+                    "icon":    "trending-up",
+                }
+
+        return reasons
 
     def invalidate_cache(self):
         """Xóa cache TF-IDF khi có sản phẩm mới"""

@@ -69,6 +69,43 @@ def recommendations():
     hybrid_products = personalized
     hybrid_algo = personalized_algo
 
+    # ── Tính lý do gợi ý cho từng nhóm sản phẩm ────────────────────────
+    rec_reasons = {}
+    if current_user.is_authenticated:
+        # Lý do cho personalized / hybrid (cùng danh sách)
+        personalized_reasons = recommendation_engine.get_recommendation_reasons(
+            user_id=current_user.id,
+            product_ids=[p.id for p in personalized],
+            algorithm=personalized_algo,
+        )
+        rec_reasons.update(personalized_reasons)
+
+        # Lý do cho similar_products (content-based)
+        if similar_products:
+            similar_reasons = recommendation_engine.get_recommendation_reasons(
+                user_id=current_user.id,
+                product_ids=[p.id for p in similar_products],
+                algorithm="content_based",
+            )
+            rec_reasons.update(similar_reasons)
+
+        # Lý do cho also_bought (popular / co-purchase)
+        if also_bought:
+            also_reasons = recommendation_engine.get_recommendation_reasons(
+                user_id=current_user.id,
+                product_ids=[p.id for p in also_bought],
+                algorithm="popular",
+            )
+            rec_reasons.update(also_reasons)
+
+    # Lý do cho popular (không cần user_id — dùng id=0 làm dummy)
+    popular_reasons = recommendation_engine.get_recommendation_reasons(
+        user_id=current_user.id if current_user.is_authenticated else 0,
+        product_ids=[p.id for p in popular],
+        algorithm="popular",
+    )
+    rec_reasons.update(popular_reasons)
+
     return render_template(
         "recommendations/recommendations.html",
         stats=stats,
@@ -82,7 +119,7 @@ def recommendations():
         popular=popular,
         hybrid_products=hybrid_products,
         hybrid_algo=hybrid_algo,
+        rec_reasons=rec_reasons,
         # Source tag: template sẽ gắn ?source=recommendation vào mọi link product
         source_tag="recommendation",
     )
-

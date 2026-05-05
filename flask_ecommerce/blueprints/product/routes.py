@@ -55,9 +55,26 @@ def product_detail(product_id):
     similar_products = recommendation_engine.get_similar_products(product_id, top_n=4)
     also_bought = recommendation_engine.get_also_bought(product_id, top_n=4)
 
+    # Tính lý do gợi ý cho từng section
+    uid = current_user.id if current_user.is_authenticated else 0
+
+    similar_reasons = recommendation_engine.get_recommendation_reasons(
+        user_id=uid,
+        product_ids=[p.id for p in similar_products],
+        algorithm="content_based",
+    ) if similar_products else {}
+
+    also_bought_reasons = recommendation_engine.get_recommendation_reasons(
+        user_id=uid,
+        product_ids=[p.id for p in also_bought],
+        algorithm="popular",
+    ) if also_bought else {}
+
     return render_template(
         "product/detail.html",
         product=product,
         similar_products=similar_products,
         also_bought=also_bought,
+        similar_reasons=similar_reasons,
+        also_bought_reasons=also_bought_reasons,
     )
