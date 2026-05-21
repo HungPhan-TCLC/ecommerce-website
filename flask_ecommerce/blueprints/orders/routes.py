@@ -2,7 +2,7 @@
 blueprints/orders/routes.py - Lịch sử đơn hàng & retry payment
 """
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_login import login_required, current_user
 from models import db, Order, CartItem, UserInteraction
 from recommendation import recommendation_engine
@@ -56,12 +56,20 @@ def order_history():
     ).order_by(Order.created_at.asc()).all()
     order_seq = {o.id: i + 1 for i, o in enumerate(all_user_orders_asc)}
 
+    # Dict product_id -> rating (float) từ UserInteraction có rating của user này
+    rated_interactions = UserInteraction.query.filter(
+        UserInteraction.user_id == current_user.id,
+        UserInteraction.rating.isnot(None),
+    ).all()
+    rating_map = {i.product_id: int(i.rating) for i in rated_interactions}
+
     return render_template(
         "orders/orders.html",
         orders=orders,
         status_filter=status_filter,
         counts=counts,
         order_seq=order_seq,
+        rating_map=rating_map,
     )
 
 
@@ -90,10 +98,14 @@ def retry_payment(order_id):
         }
 
         if method == "momo":
+            momo_return_url = url_for("checkout.momo_return", _external=True)
+            momo_notify_url = url_for("checkout.momo_notify", _external=True)
             pay_url, message = momo_create_payment(
                 order_id=order.id,
                 amount=order.total_amount,
                 order_info=f"Thanh toan don hang LUXE #{order.id}",
+                return_url=momo_return_url,
+                notify_url=momo_notify_url,
             )
             if pay_url:
                 session["momo_order_id"] = order.id
@@ -154,3 +166,52 @@ def cancel_pending_order(order_id):
     db.session.commit()
     flash(f"Đã hủy đơn hàng #{order.id}.", "success")
     return redirect(url_for("orders.order_history"))
+
+
+@orders_bp.route("/order/<int:order_id>/review/<int:product_id>", methods=["POST"])
+@login_required
+def submit_review(order_id, product_id):
+    """
+    Lưu đánh giá sao (1-5) trực tiếp vào cột rating của UserInteraction.
+    Upsert: nếu đã có interaction_type='rating' thì cập nhật, chưa có thì tạo mới.
+    """
+    order = Order.query.get_or_404(order_id)
+
+    if order.user_id != current_user.id:
+        return jsonify({"ok": False, "message": "Không có quyền."}), 403
+    if order.status != "delivered":
+        return jsonify({"ok": False, "message": "Chỉ đánh giá đơn hàng đã giao."}), 400
+
+    order_product_ids = {item.product_id for item in order.items}
+    if product_id not in order_product_ids:
+        return jsonify({"ok": False, "message": "Sản phẩm không thuộc đơn hàng này."}), 400
+
+    try:
+        rating = int(request.form.get("rating", 0))
+    except (TypeError, ValueError):
+        rating = 0
+    if rating < 1 or rating > 5:
+        return jsonify({"ok": False, "message": "Điểm đánh giá phải từ 1-5."}), 400
+
+    # Upsert UserInteraction với interaction_type='rating'
+    interaction = UserInteraction.query.filter_by(
+        user_id=current_user.id,
+        product_id=product_id,
+        interaction_type="rating",
+    ).first()
+
+    if interaction:
+        interaction.rating = float(rating)
+    else:
+        db.session.add(UserInteraction(
+            user_id=current_user.id,
+            product_id=product_id,
+            interaction_type="rating",
+            rating=float(rating),
+            source="review",
+        ))
+
+    db.session.commit()
+    recommendation_engine.invalidate_cache()
+
+    return jsonify({"ok": True, "rating": rating})

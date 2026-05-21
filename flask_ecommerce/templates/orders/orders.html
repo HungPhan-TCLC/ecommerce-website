@@ -50,6 +50,41 @@
     /* ── Scroll tabs on mobile ── */
     .tabs-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
     .tabs-scroll::-webkit-scrollbar { display: none; }
+
+    /* ── Inline Star Rating ── */
+    .star-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 1px;
+        margin-top: 4px;
+    }
+    .star-row .star {
+        font-size: 1.1rem;
+        color: #d1d5db;
+        cursor: pointer;
+        transition: color 0.12s, transform 0.12s;
+        line-height: 1;
+        user-select: none;
+    }
+    /* Hover: tô sao từ đầu đến sao đang hover */
+    .star-row:not(.locked) .star:hover,
+    .star-row:not(.locked) .star:hover ~ .star { color: #f59e0b; }
+    .star-row:not(.locked) .star:hover { transform: scale(1.25); }
+    /* Sao đã chọn */
+    .star-row .star.filled { color: #f59e0b; }
+    /* Đã gửi → không hover nữa */
+    .star-row.locked .star { cursor: default; }
+
+    .star-label {
+        font-size: 0.68rem;
+        font-weight: 500;
+        color: #6b7280;
+        margin-left: 4px;
+        transition: color 0.2s;
+    }
+    .star-label.saving { color: #f59e0b; }
+    .star-label.saved  { color: #10b981; }
+    .star-label.error  { color: #ef4444; }
 </style>
 {% endblock %}
 
@@ -155,7 +190,8 @@
             <div class="p-5">
                 <div class="space-y-3">
                     {% for item in order.items %}
-                    <div class="flex gap-3 items-center">
+                    {% set cur_rating = rating_map.get(item.product_id, 0) %}
+                    <div class="flex gap-3 items-start">
                         <a href="{{ url_for('product.product_detail', product_id=item.product.id) }}"
                            class="w-14 h-14 rounded-lg overflow-hidden bg-dark-100 flex-shrink-0 hover:opacity-80 transition-opacity">
                             <img src="{{ item.product.image_url }}" alt="{{ item.product.name }}"
@@ -169,6 +205,32 @@
                             <p class="text-xs text-dark-400 mt-0.5">
                                 {{ item.quantity }} × {{ item.price | format_price }}
                             </p>
+
+                            {% if order.status == 'delivered' %}
+                            {# ── Inline Star Picker ── #}
+                            <div class="flex items-center gap-1 mt-1.5">
+                                <div class="star-row {% if cur_rating > 0 %}locked{% endif %}"
+                                     id="stars-{{ order.id }}-{{ item.product_id }}"
+                                     data-order="{{ order.id }}"
+                                     data-product="{{ item.product_id }}">
+                                    {# Sao xếp từ 1→5 (dùng JS hover, không dùng row-reverse) #}
+                                    {% for i in range(1, 6) %}
+                                    <span class="star {% if cur_rating >= i %}filled{% endif %}"
+                                          data-val="{{ i }}"
+                                          onclick="rateStar(this, {{ i }}, {{ order.id }}, {{ item.product_id }})">★</span>
+                                    {% endfor %}
+                                </div>
+                                <span class="star-label {% if cur_rating > 0 %}saved{% endif %}"
+                                      id="lbl-{{ order.id }}-{{ item.product_id }}">
+                                    {% if cur_rating > 0 %}
+                                        {% set lbls = ['', 'Rất tệ', 'Không hài lòng', 'Bình thường', 'Hài lòng', 'Tuyệt vời!'] %}
+                                        {{ lbls[cur_rating] }}
+                                    {% else %}
+                                        Đánh giá
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% endif %}
                         </div>
                         <p class="text-sm font-semibold text-dark-800 flex-shrink-0">
                             {{ (item.price * item.quantity) | format_price }}
@@ -272,4 +334,60 @@
     {% endif %}
 
 </div>
+
+<script>
+const STAR_LABELS = ['', 'Rất tệ', 'Không hài lòng', 'Bình thường', 'Hài lòng', 'Tuyệt vời!'];
+
+// Hover effect: tô từ sao 1 đến sao đang hover
+document.querySelectorAll('.star-row:not(.locked)').forEach(row => {
+    const stars = row.querySelectorAll('.star');
+    stars.forEach((star, idx) => {
+        star.addEventListener('mouseenter', () => {
+            stars.forEach((s, i) => {
+                s.style.color = i <= idx ? '#f59e0b' : '';
+            });
+        });
+        star.addEventListener('mouseleave', () => {
+            stars.forEach(s => s.style.color = '');
+        });
+    });
+});
+
+async function rateStar(el, value, orderId, productId) {
+    const row = document.getElementById(`stars-${orderId}-${productId}`);
+    const lbl = document.getElementById(`lbl-${orderId}-${productId}`);
+
+    if (!row || row.classList.contains('locked')) return;
+
+    // Tạm thời hiện sao + loading
+    const stars = row.querySelectorAll('.star');
+    stars.forEach((s, i) => {
+        s.classList.toggle('filled', i < value);
+        s.style.color = '';
+    });
+    lbl.textContent = 'Đang lưu…';
+    lbl.className = 'star-label saving';
+
+    const fd = new FormData();
+    fd.append('rating', value);
+
+    try {
+        const res  = await fetch(`/order/${orderId}/review/${productId}`, { method: 'POST', body: fd });
+        const data = await res.json();
+
+        if (data.ok) {
+            // Khoá row, cập nhật label
+            row.classList.add('locked');
+            lbl.textContent = STAR_LABELS[value];
+            lbl.className   = 'star-label saved';
+        } else {
+            lbl.textContent = data.message || 'Lỗi!';
+            lbl.className   = 'star-label error';
+        }
+    } catch {
+        lbl.textContent = 'Mất kết nối!';
+        lbl.className   = 'star-label error';
+    }
+}
+</script>
 {% endblock %}
