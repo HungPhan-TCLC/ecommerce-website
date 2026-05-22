@@ -376,7 +376,7 @@ def admin_ai_stats():
     eval_computed_at = None
     eval_num_users   = None
     eval_k           = None
-    online_metrics   = {}
+    # online metrics removed: stored separately or not used in this UI
 
     # Lấy run_id mới nhất
     latest = EvaluationResult.query.order_by(EvaluationResult.computed_at.desc()).first()
@@ -388,12 +388,12 @@ def admin_ai_stats():
 
         batch = EvaluationResult.query.filter_by(run_id=latest_run_id).all()
         for row in batch:
+            # skip aggregate/online metrics (algorithm == 'all')
             if row.algorithm == "all":
-                online_metrics[row.metric_name] = row.metric_value
-            else:
-                if row.algorithm not in eval_results:
-                    eval_results[row.algorithm] = {}
-                eval_results[row.algorithm][row.metric_name] = round(row.metric_value, 4)
+                continue
+            if row.algorithm not in eval_results:
+                eval_results[row.algorithm] = {}
+            eval_results[row.algorithm][row.metric_name] = round(row.metric_value, 4)
 
     return render_template(
         "admin/ai_stats.html",
@@ -403,7 +403,6 @@ def admin_ai_stats():
         stats=stats,
         # Evaluation results
         eval_results=eval_results,
-        online_metrics=online_metrics,
         eval_computed_at=eval_computed_at,
         eval_num_users=eval_num_users,
         eval_k=eval_k,
