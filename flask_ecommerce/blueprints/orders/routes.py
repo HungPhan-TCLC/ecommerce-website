@@ -135,7 +135,6 @@ def retry_payment(order_id):
                     user_id=current_user.id,
                     product_id=item.product_id,
                     interaction_type="purchase",
-                    rating=5.0,
                 ))
             db.session.commit()
             recommendation_engine.invalidate_cache()

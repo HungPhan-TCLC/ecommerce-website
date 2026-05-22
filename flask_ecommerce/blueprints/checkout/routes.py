@@ -71,7 +71,6 @@ def checkout():
                 user_id=current_user.id,
                 product_id=cart_item.product_id,
                 interaction_type="purchase",
-                rating=5.0,
             ))
             db.session.delete(cart_item)
 
@@ -253,7 +252,6 @@ def vnpay_return():
                 user_id=order.user_id,
                 product_id=item.product_id,
                 interaction_type="purchase",
-                rating=5.0,
             ))
         db.session.commit()
         recommendation_engine.invalidate_cache()
@@ -388,7 +386,6 @@ def momo_return():
                 user_id=order.user_id,
                 product_id=item.product_id,
                 interaction_type="purchase",
-                rating=5.0,
             ))
         db.session.commit()
         recommendation_engine.invalidate_cache()

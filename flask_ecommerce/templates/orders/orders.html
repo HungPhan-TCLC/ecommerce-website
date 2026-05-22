@@ -209,7 +209,7 @@
                             {% if order.status == 'delivered' %}
                             {# ── Inline Star Picker ── #}
                             <div class="flex items-center gap-1 mt-1.5">
-                                <div class="star-row {% if cur_rating > 0 %}locked{% endif %}"
+                                      <div class="star-row"
                                      id="stars-{{ order.id }}-{{ item.product_id }}"
                                      data-order="{{ order.id }}"
                                      data-product="{{ item.product_id }}">
@@ -357,7 +357,10 @@ async function rateStar(el, value, orderId, productId) {
     const row = document.getElementById(`stars-${orderId}-${productId}`);
     const lbl = document.getElementById(`lbl-${orderId}-${productId}`);
 
-    if (!row || row.classList.contains('locked')) return;
+    if (!row) return;
+
+    // Nếu đang lưu, chặn thao tác kép
+    if (row.dataset.saving === '1') return;
 
     // Tạm thời hiện sao + loading
     const stars = row.querySelectorAll('.star');
@@ -368,6 +371,8 @@ async function rateStar(el, value, orderId, productId) {
     lbl.textContent = 'Đang lưu…';
     lbl.className = 'star-label saving';
 
+    row.dataset.saving = '1';
+
     const fd = new FormData();
     fd.append('rating', value);
 
@@ -376,10 +381,11 @@ async function rateStar(el, value, orderId, productId) {
         const data = await res.json();
 
         if (data.ok) {
-            // Khoá row, cập nhật label
-            row.classList.add('locked');
+            // Cập nhật label (vẫn cho phép chỉnh sửa lại)
             lbl.textContent = STAR_LABELS[value];
             lbl.className   = 'star-label saved';
+            // cập nhật filled state (giữ cho nhất quán)
+            stars.forEach((s, i) => s.classList.toggle('filled', i < value));
         } else {
             lbl.textContent = data.message || 'Lỗi!';
             lbl.className   = 'star-label error';
@@ -388,6 +394,7 @@ async function rateStar(el, value, orderId, productId) {
         lbl.textContent = 'Mất kết nối!';
         lbl.className   = 'star-label error';
     }
+    row.dataset.saving = '0';
 }
 </script>
 {% endblock %}
