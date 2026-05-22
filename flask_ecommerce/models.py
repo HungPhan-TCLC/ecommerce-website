@@ -147,7 +147,7 @@ class EvaluationResult(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     run_id = db.Column(db.String(50), nullable=False)          # UUID nhóm cùng 1 lần chạy
     computed_at = db.Column(db.DateTime, default=datetime.utcnow)
-    algorithm = db.Column(db.String(50), nullable=False)        # content_based, collaborative, hybrid, all
+    algorithm = db.Column(db.String(50), nullable=False)        # content_based, collaborative, hybrid
     metric_name = db.Column(db.String(50), nullable=False)      # precision_at_k, recall_at_k, ndcg, coverage, diversity, ctr, ...
     metric_value = db.Column(db.Float, nullable=False)
     k_value = db.Column(db.Integer, nullable=True)              # K=8 (None nếu không liên quan đến K)

@@ -5,14 +5,13 @@ Phương án A — Offline Evaluation (Temporal Split 80/20):
   - Precision@K, Recall@K, Hit Rate@K, NDCG@K
   - Catalog Coverage, Intra-list Diversity
 
-Phương án B — Online Metrics (từ UserInteraction.source):
-  - CTR (Click-through Rate từ recommendation)
-  - Conversion Rate (purchase / click_from_rec)
-  - Recommendation Acceptance Rate
+ 
 
 K mặc định = 8 (theo cấu hình hệ thống)
 """
 
+from scipy.spatial.transform import _rotation_spline
+from scipy.spatial.transform import _rotation_spline
 import uuid
 import math
 import numpy as np
@@ -360,76 +359,6 @@ class RecommendationEvaluator:
         }
 
     # =========================================================================
-    #  Online Metrics (Phương án B) — từ UserInteraction.source
-    # =========================================================================
-
-    def get_online_metrics(self) -> dict:
-        """
-        Online metrics dựa trên field source='recommendation' trong UserInteraction.
-
-        Tính:
-          - CTR: view từ recommendation / tổng interaction từ recommendation
-          - Conversion Rate: purchase từ recommendation / view từ recommendation
-          - Acceptance Rate: % users click+purchase ≥1 sản phẩm từ rec
-          - Avg recommendation count per user (who saw rec)
-        """
-        from sqlalchemy import func
-
-        total_rec_views = UserInteraction.query.filter_by(
-            source="recommendation", interaction_type="view"
-        ).count()
-
-        total_rec_carts = UserInteraction.query.filter_by(
-            source="recommendation", interaction_type="cart"
-        ).count()
-
-        total_rec_purchases = UserInteraction.query.filter_by(
-            source="recommendation", interaction_type="purchase"
-        ).count()
-
-        total_rec_interactions = total_rec_views + total_rec_carts + total_rec_purchases
-        total_interactions = UserInteraction.query.count()
-
-        # CTR = xem từ recommendation / tổng xem
-        all_views = UserInteraction.query.filter_by(interaction_type="view").count()
-        ctr = round(total_rec_views / all_views, 4) if all_views else 0.0
-
-        # Conversion Rate = purchase_from_rec / view_from_rec
-        conversion_rate = round(total_rec_purchases / total_rec_views, 4) if total_rec_views else 0.0
-
-        # Cart Rate = cart_from_rec / view_from_rec
-        cart_rate = round(total_rec_carts / total_rec_views, 4) if total_rec_views else 0.0
-
-        # Users tương tác từ recommendation
-        rec_user_ids = db.session.query(
-            UserInteraction.user_id
-        ).filter(
-            UserInteraction.source == "recommendation"
-        ).distinct().count()
-
-        # Acceptance Rate (≥1 purchase từ recommendation)
-        accepted_users = db.session.query(UserInteraction.user_id).filter(
-            UserInteraction.source == "recommendation",
-            UserInteraction.interaction_type == "purchase",
-        ).distinct().count()
-
-        acceptance_rate = round(accepted_users / rec_user_ids, 4) if rec_user_ids else 0.0
-
-        return {
-            "ctr":                    ctr,
-            "conversion_rate":        conversion_rate,
-            "cart_rate":              cart_rate,
-            "acceptance_rate":        acceptance_rate,
-            "total_rec_views":        total_rec_views,
-            "total_rec_carts":        total_rec_carts,
-            "total_rec_purchases":    total_rec_purchases,
-            "total_rec_interactions": total_rec_interactions,
-            "rec_active_users":       rec_user_ids,
-            "accepted_users":         accepted_users,
-            "total_interactions":     total_interactions,
-        }
-
-    # =========================================================================
     #  Main: Run Full Evaluation + Save to DB
     # =========================================================================
 
@@ -449,11 +378,8 @@ class RecommendationEvaluator:
         cov     = self.evaluate_catalog_coverage(k)
         div     = self.evaluate_diversity(k)
 
-        # ── Online ──────────────────────────────────────────────────────────
-        online  = self.get_online_metrics()
-
         num_users = pr.get("num_users", 0)
-
+        
         # ── Lưu vào DB ──────────────────────────────────────────────────────
         records_to_save = []
 
@@ -485,21 +411,6 @@ class RecommendationEvaluator:
                                  metric_value=div.get(f"diversity_{algo}", 0.0),
                                  k_value=k, num_users_evaluated=num_users),
             ]
-
-        # Online metrics (algorithm = 'all')
-        for metric_name, metric_value in [
-            ("ctr",             online["ctr"]),
-            ("conversion_rate", online["conversion_rate"]),
-            ("cart_rate",       online["cart_rate"]),
-            ("acceptance_rate", online["acceptance_rate"]),
-        ]:
-            records_to_save.append(
-                EvaluationResult(run_id=run_id, computed_at=computed_at, algorithm="all",
-                                 metric_name=metric_name,
-                                 metric_value=metric_value,
-                                 k_value=None, num_users_evaluated=online["rec_active_users"])
-            )
-
         db.session.add_all(records_to_save)
         db.session.commit()
 
@@ -514,7 +425,6 @@ class RecommendationEvaluator:
                 "catalog_coverage": cov,
                 "diversity":        div,
             },
-            "online": online,
         }
 
     # =========================================================================

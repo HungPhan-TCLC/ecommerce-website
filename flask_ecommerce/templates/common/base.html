@@ -118,10 +118,12 @@
                                 Thông tin tài khoản
                             </a>
                             {% if current_user.is_admin %}
+                            <!--
                             <a href="{{ url_for('recommendations.recommendations') }}" class="block px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 flex items-center gap-1.5">
                                 <i data-lucide="brain" class="w-3.5 h-3.5"></i>
                                 AI Gợi ý cho tôi
                             </a>
+                            -->
                             <div class="border-t border-dark-100 mt-1 pt-1">
                                 <a href="{{ url_for('admin.admin_dashboard') }}" class="block px-4 py-2 text-sm text-dark-800 font-medium hover:bg-dark-50 flex items-center gap-1.5">
                                     <i data-lucide="shield-check" class="w-3.5 h-3.5 text-primary-600"></i>
