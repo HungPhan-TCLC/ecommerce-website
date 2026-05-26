@@ -87,7 +87,6 @@ def seed_interactions(users, products):
             db.session.add(UserInteraction(
                 user_id=user.id, product_id=product.id,
                 interaction_type="view",
-                rating=round(random.uniform(3.5, 5.0), 1),
                 created_at=datetime.utcnow() - timedelta(days=random.randint(1, 30)),
             ))
             interaction_count += 1
@@ -98,7 +97,6 @@ def seed_interactions(users, products):
             db.session.add(UserInteraction(
                 user_id=user.id, product_id=product.id,
                 interaction_type="view",
-                rating=round(random.uniform(1.0, 3.5), 1),
                 created_at=datetime.utcnow() - timedelta(days=random.randint(1, 30)),
             ))
             interaction_count += 1
@@ -109,7 +107,6 @@ def seed_interactions(users, products):
             db.session.add(UserInteraction(
                 user_id=user.id, product_id=product.id,
                 interaction_type="cart",
-                rating=round(random.uniform(4.0, 5.0), 1),
                 created_at=datetime.utcnow() - timedelta(days=random.randint(1, 20)),
             ))
             interaction_count += 1
@@ -120,7 +117,6 @@ def seed_interactions(users, products):
             db.session.add(UserInteraction(
                 user_id=user.id, product_id=product.id,
                 interaction_type="purchase",
-                rating=round(random.uniform(4.0, 5.0), 1),
                 created_at=datetime.utcnow() - timedelta(days=random.randint(1, 15)),
             ))
             interaction_count += 1
@@ -187,8 +183,13 @@ def run_seed():
     app = create_app()
 
     with app.app_context():
-        # Xóa và tạo lại schema
-        db.drop_all()
+        # Xóa và tạo lại schema (dùng CASCADE để tránh lỗi foreign key)
+        from sqlalchemy import text
+        with db.engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+            conn.execute(text("GRANT ALL ON SCHEMA public TO PUBLIC"))
+            conn.commit()
         db.create_all()
 
         print("=" * 55)
